@@ -18,8 +18,8 @@ app.innerHTML = `
           <strong>Editable</strong>
         </div>
         <div class="metric">
-          <span>Render</span>
-          <strong>Real-Time</strong>
+          <span>Validation</span>
+          <strong id="validation-state">Pending</strong>
         </div>
       </div>
     </header>
@@ -65,6 +65,11 @@ app.innerHTML = `
           <h2>Layers</h2>
           <div id="layer-editor"></div>
         </div>
+        <div class="panel-card">
+          <h2>Architecture Diagnostics</h2>
+          <p id="shape-summary">No architecture analyzed yet.</p>
+          <ul id="diagnostics-list"></ul>
+        </div>
         <div class="panel-card legend">
           <h2>Layer Legend</h2>
           <ul id="legend-list"></ul>
@@ -91,6 +96,9 @@ const depthControl = document.querySelector('#depth-control');
 const waveControl = document.querySelector('#wave-control');
 const pulseControl = document.querySelector('#pulse-control');
 const rotateControl = document.querySelector('#rotate-control');
+const diagnosticsList = document.querySelector('#diagnostics-list');
+const shapeSummary = document.querySelector('#shape-summary');
+const validationState = document.querySelector('#validation-state');
 
 const layerColors = {
   input: '#93c5fd',
@@ -110,37 +118,169 @@ const layerColors = {
 const presets = {
   cnn: {
     description: 'CNN preset loaded. Edit names, types, and dimensions freely.',
+    mode: 'cnn',
     layers: [
-      { name: 'Input 224x224x3', type: 'input', w: 6, h: 6, d: 0.6 },
-      { name: 'Conv 7x7, 64', type: 'conv', w: 5.4, h: 5.4, d: 0.9 },
-      { name: 'MaxPool 3x3', type: 'pool', w: 4.8, h: 4.8, d: 0.7 },
-      { name: 'Conv 3x3, 128', type: 'conv', w: 4.3, h: 4.3, d: 1.0 },
-      { name: 'BatchNorm', type: 'norm', w: 4.1, h: 4.1, d: 0.45 },
-      { name: 'Conv 3x3, 256', type: 'conv', w: 3.5, h: 3.5, d: 1.1 },
-      { name: 'Global AvgPool', type: 'pool', w: 2.7, h: 2.7, d: 0.7 },
-      { name: 'Dense 1024', type: 'dense', w: 2.1, h: 2.1, d: 1.0 },
-      { name: 'Output 1000', type: 'output', w: 1.6, h: 1.6, d: 0.9 },
+      { name: 'Input 224x224x3', type: 'input', w: 6, h: 6, d: 0.6, params: { h: 224, w: 224, c: 3 } },
+      { name: 'Conv 7x7, 64', type: 'conv', w: 5.4, h: 5.4, d: 0.9, params: { k: 7, s: 2, p: 3, filters: 64 } },
+      { name: 'MaxPool 3x3', type: 'pool', w: 4.8, h: 4.8, d: 0.7, params: { k: 3, s: 2, p: 1 } },
+      { name: 'Conv 3x3, 128', type: 'conv', w: 4.3, h: 4.3, d: 1.0, params: { k: 3, s: 1, p: 1, filters: 128 } },
+      { name: 'BatchNorm', type: 'norm', w: 4.1, h: 4.1, d: 0.45, params: {} },
+      { name: 'Conv 3x3, 256', type: 'conv', w: 3.5, h: 3.5, d: 1.1, params: { k: 3, s: 2, p: 1, filters: 256 } },
+      { name: 'Global AvgPool', type: 'pool', w: 2.7, h: 2.7, d: 0.7, params: { k: 7, s: 1, p: 0 } },
+      { name: 'Dense 1024', type: 'dense', w: 2.1, h: 2.1, d: 1.0, params: { units: 1024 } },
+      { name: 'Output 1000', type: 'output', w: 1.6, h: 1.6, d: 0.9, params: { classes: 1000 } },
     ],
   },
   transformer: {
     description: 'Transformer preset loaded. Tune blocks to match your model.',
+    mode: 'transformer',
     layers: [
-      { name: 'Token Embedding', type: 'token', w: 6.3, h: 2.0, d: 1.0 },
-      { name: 'Positional Encoding', type: 'positional', w: 6.0, h: 1.8, d: 0.7 },
-      { name: 'LayerNorm', type: 'norm', w: 5.8, h: 1.6, d: 0.5 },
-      { name: 'Multi-Head Attention', type: 'attention', w: 5.5, h: 2.4, d: 1.4 },
-      { name: 'Residual Add', type: 'residual', w: 5.3, h: 1.6, d: 0.5 },
-      { name: 'Feed Forward', type: 'ffn', w: 4.7, h: 2.2, d: 1.1 },
-      { name: 'Residual Add', type: 'residual', w: 4.5, h: 1.6, d: 0.5 },
-      { name: 'LayerNorm', type: 'norm', w: 4.1, h: 1.5, d: 0.4 },
-      { name: 'Classifier Head', type: 'head', w: 3.5, h: 1.7, d: 0.9 },
-      { name: 'Output Tokens', type: 'output', w: 3.0, h: 1.4, d: 0.7 },
+      { name: 'Token Embedding', type: 'token', w: 6.3, h: 2.0, d: 1.0, params: { seq: 128, dModel: 512 } },
+      { name: 'Positional Encoding', type: 'positional', w: 6.0, h: 1.8, d: 0.7, params: {} },
+      { name: 'LayerNorm', type: 'norm', w: 5.8, h: 1.6, d: 0.5, params: {} },
+      { name: 'Multi-Head Attention', type: 'attention', w: 5.5, h: 2.4, d: 1.4, params: { heads: 8 } },
+      { name: 'Residual Add', type: 'residual', w: 5.3, h: 1.6, d: 0.5, params: {} },
+      { name: 'Feed Forward', type: 'ffn', w: 4.7, h: 2.2, d: 1.1, params: { hidden: 2048 } },
+      { name: 'Residual Add', type: 'residual', w: 4.5, h: 1.6, d: 0.5, params: {} },
+      { name: 'LayerNorm', type: 'norm', w: 4.1, h: 1.5, d: 0.4, params: {} },
+      { name: 'Classifier Head', type: 'head', w: 3.5, h: 1.7, d: 0.9, params: { classes: 10 } },
+      { name: 'Output Tokens', type: 'output', w: 3.0, h: 1.4, d: 0.7, params: { classes: 10 } },
     ],
   },
 };
 
 const layerTypeOptions = Object.keys(layerColors);
 let architectureState = structuredClone(presets.cnn.layers);
+let architectureMode = 'cnn';
+let lastShapeInfo = [];
+
+function defaultParamsForType(type) {
+  const defaults = {
+    input: { h: 224, w: 224, c: 3 },
+    conv: { k: 3, s: 1, p: 1, filters: 64 },
+    pool: { k: 2, s: 2, p: 0 },
+    norm: {},
+    dense: { units: 512 },
+    output: { classes: 10 },
+    token: { seq: 128, dModel: 512 },
+    positional: {},
+    attention: { heads: 8 },
+    ffn: { hidden: 2048 },
+    residual: {},
+    head: { classes: 10 },
+  };
+  return structuredClone(defaults[type] || {});
+}
+
+function cnnOutDim(size, k, s, p) {
+  return Math.floor((size + 2 * p - k) / s) + 1;
+}
+
+function validateArchitecture(layers, mode) {
+  const messages = [];
+  const shapes = [];
+  let state = null;
+
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index];
+    const params = layer.params || {};
+    let descriptor = 'unknown';
+
+    if (mode === 'cnn') {
+      if (layer.type === 'input') {
+        state = { h: params.h || 224, w: params.w || 224, c: params.c || 3 };
+        descriptor = `${state.h}x${state.w}x${state.c}`;
+      } else if (!state) {
+        messages.push(`Layer ${index + 1} (${layer.name}) needs an input layer first.`);
+      } else if (layer.type === 'conv') {
+        const k = Number(params.k || 3);
+        const s = Number(params.s || 1);
+        const p = Number(params.p || 0);
+        const filters = Number(params.filters || state.c);
+        const outH = cnnOutDim(state.h, k, s, p);
+        const outW = cnnOutDim(state.w, k, s, p);
+        if (outH <= 0 || outW <= 0) {
+          messages.push(`Conv at layer ${index + 1} has invalid kernel/stride/padding for current tensor.`);
+        } else {
+          state = { h: outH, w: outW, c: filters };
+        }
+        descriptor = `${state.h}x${state.w}x${state.c}`;
+      } else if (layer.type === 'pool') {
+        const k = Number(params.k || 2);
+        const s = Number(params.s || 2);
+        const p = Number(params.p || 0);
+        const outH = cnnOutDim(state.h, k, s, p);
+        const outW = cnnOutDim(state.w, k, s, p);
+        if (outH <= 0 || outW <= 0) {
+          messages.push(`Pooling at layer ${index + 1} collapses spatial dimensions.`);
+        } else {
+          state = { ...state, h: outH, w: outW };
+        }
+        descriptor = `${state.h}x${state.w}x${state.c}`;
+      } else if (layer.type === 'dense') {
+        state = { h: 1, w: 1, c: Number(params.units || 512) };
+        descriptor = `${state.c} units`;
+      } else if (layer.type === 'output') {
+        const classes = Number(params.classes || 10);
+        state = { h: 1, w: 1, c: classes };
+        descriptor = `${classes} classes`;
+      } else {
+        descriptor = state ? `${state.h}x${state.w}x${state.c}` : 'pending';
+      }
+    } else {
+      if (layer.type === 'token') {
+        state = { seq: Number(params.seq || 128), dModel: Number(params.dModel || 512) };
+        descriptor = `${state.seq}x${state.dModel}`;
+      } else if (!state) {
+        messages.push(`Layer ${index + 1} (${layer.name}) needs a token embedding layer first.`);
+      } else if (layer.type === 'attention') {
+        const heads = Number(params.heads || 8);
+        if (state.dModel % heads !== 0) {
+          messages.push(`Attention at layer ${index + 1}: dModel (${state.dModel}) must divide by heads (${heads}).`);
+        }
+        descriptor = `${state.seq}x${state.dModel}`;
+      } else if (layer.type === 'ffn') {
+        const hidden = Number(params.hidden || 2048);
+        descriptor = `${state.seq}x${state.dModel} (ffn:${hidden})`;
+      } else if (layer.type === 'head' || layer.type === 'output') {
+        const classes = Number(params.classes || 10);
+        descriptor = `${state.seq}x${classes}`;
+      } else {
+        descriptor = `${state.seq}x${state.dModel}`;
+      }
+    }
+
+    shapes.push({ index, descriptor });
+  }
+
+  const status = messages.length ? 'invalid' : 'valid';
+  return { messages, shapes, status };
+}
+
+function updateDiagnostics(result) {
+  validationState.textContent = result.status === 'valid' ? 'Valid' : 'Issues';
+  validationState.style.color = result.status === 'valid' ? '#86efac' : '#fca5a5';
+
+  shapeSummary.textContent = result.shapes.length
+    ? `Computed shape trail across ${result.shapes.length} layers.`
+    : 'No layers to validate.';
+
+  diagnosticsList.innerHTML = '';
+  if (!result.messages.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No validation errors detected.';
+    li.className = 'diag-ok';
+    diagnosticsList.appendChild(li);
+    return;
+  }
+
+  result.messages.forEach((message) => {
+    const li = document.createElement('li');
+    li.textContent = message;
+    li.className = 'diag-error';
+    diagnosticsList.appendChild(li);
+  });
+}
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#050713');
@@ -358,6 +498,9 @@ function rerenderScene() {
     legendList.innerHTML = '<li>No layers defined</li>';
     return;
   }
+  const validation = validateArchitecture(architectureState, architectureMode);
+  lastShapeInfo = validation.shapes;
+  updateDiagnostics(validation);
   buildArchitecture(architectureState);
 }
 
@@ -429,6 +572,8 @@ function renderLayerEditor() {
     });
     typeSelect.addEventListener('change', () => {
       architectureState[index].type = typeSelect.value;
+      architectureState[index].params = defaultParamsForType(typeSelect.value);
+      renderLayerEditor();
       rerenderScene();
     });
     typeField.append(typeLabel, typeSelect);
@@ -452,6 +597,49 @@ function renderLayerEditor() {
         rerenderScene();
       }),
     );
+
+    const params = architectureState[index].params || {};
+    architectureState[index].params = params;
+
+    const addParamField = (label, key, fallback = 1, min = 1) => {
+      card.appendChild(
+        createField(label, Number(params[key] ?? fallback), (value) => {
+          architectureState[index].params[key] = Math.max(min, Math.round(value));
+          rerenderScene();
+        }, { min, max: 4096, step: 1 }),
+      );
+    };
+
+    if (layer.type === 'input') {
+      addParamField('H', 'h', 224, 1);
+      addParamField('W', 'w', 224, 1);
+      addParamField('C', 'c', 3, 1);
+    } else if (layer.type === 'conv') {
+      addParamField('Kernel', 'k', 3, 1);
+      addParamField('Stride', 's', 1, 1);
+      addParamField('Pad', 'p', 1, 0);
+      addParamField('Filters', 'filters', 64, 1);
+    } else if (layer.type === 'pool') {
+      addParamField('Kernel', 'k', 2, 1);
+      addParamField('Stride', 's', 2, 1);
+      addParamField('Pad', 'p', 0, 0);
+    } else if (layer.type === 'dense') {
+      addParamField('Units', 'units', 512, 1);
+    } else if (layer.type === 'output' || layer.type === 'head') {
+      addParamField('Classes', 'classes', 10, 1);
+    } else if (layer.type === 'token') {
+      addParamField('Seq', 'seq', 128, 1);
+      addParamField('dModel', 'dModel', 512, 1);
+    } else if (layer.type === 'attention') {
+      addParamField('Heads', 'heads', 8, 1);
+    } else if (layer.type === 'ffn') {
+      addParamField('Hidden', 'hidden', 2048, 1);
+    }
+
+    const shapePill = document.createElement('p');
+    shapePill.className = 'shape-pill';
+    shapePill.textContent = `Derived: ${lastShapeInfo[index]?.descriptor || 'n/a'}`;
+    card.appendChild(shapePill);
 
     const moveRow = document.createElement('div');
     moveRow.className = 'inline-actions';
@@ -490,6 +678,7 @@ function renderLayerEditor() {
 
 function loadPreset(presetName) {
   architectureState = structuredClone(presets[presetName].layers);
+  architectureMode = presets[presetName].mode;
   presetDescription.textContent = presets[presetName].description;
   renderLayerEditor();
   rerenderScene();
@@ -513,10 +702,11 @@ loadTransformerBtn.addEventListener('click', () => {
 addLayerBtn.addEventListener('click', () => {
   architectureState.push({
     name: `Layer ${architectureState.length + 1}`,
-    type: 'conv',
+    type: architectureMode === 'cnn' ? 'conv' : 'attention',
     w: 3,
     h: 3,
     d: 0.8,
+    params: defaultParamsForType(architectureMode === 'cnn' ? 'conv' : 'attention'),
   });
   renderLayerEditor();
   rerenderScene();
