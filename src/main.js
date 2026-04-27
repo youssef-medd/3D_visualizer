@@ -1,6 +1,9 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 const app = document.querySelector('#app');
 
@@ -312,6 +315,8 @@ camera.position.set(0, 4, 36);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
 viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -321,20 +326,30 @@ controls.maxDistance = 100;
 controls.enablePan = true;
 controls.target.set(0, 0.3, 0);
 
-const ambient = new THREE.AmbientLight('#e2e8f0', 0.28);
+// Post-processing bloom
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(512, 512), 1.35, 0.55, 0.07);
+composer.addPass(bloomPass);
+
+const ambient = new THREE.AmbientLight('#080d22', 0.22);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight('#60a5fa', 1.2);
-keyLight.position.set(12, 12, 22);
+const keyLight = new THREE.DirectionalLight('#c7d2fe', 1.4);
+keyLight.position.set(12, 14, 22);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight('#c084fc', 1.0);
+const rimLight = new THREE.DirectionalLight('#a855f7', 1.1);
 rimLight.position.set(-14, 8, -14);
 scene.add(rimLight);
 
-const fillLight = new THREE.PointLight('#22d3ee', 1.2, 90);
+const fillLight = new THREE.PointLight('#22d3ee', 2.2, 90);
 fillLight.position.set(0, 8, 8);
 scene.add(fillLight);
+
+const accentLight = new THREE.PointLight('#ec4899', 0.9, 80);
+accentLight.position.set(14, -4, -8);
+scene.add(accentLight);
 
 const floorGlow = new THREE.Mesh(
   new THREE.PlaneGeometry(180, 180),
@@ -445,67 +460,172 @@ function addArrow(start, end) {
   connectionGroup.add(head);
 }
 
+// ── Holographic scan-line shader ─────────────────────────────
+const _scanVert = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const _scanFrag = `
+  uniform vec3  uColor;
+  uniform float uTime;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    float line  = step(0.5, fract(vUv.y * 18.0));
+    float scan  = step(0.5, fract(vUv.y * 1.2 - uTime * 0.18));
+    float alpha = (0.025 + line * 0.03 + scan * 0.045) * uOpacity;
+    gl_FragColor = vec4(uColor, alpha);
+  }
+`;
+
+const _scanMaterials    = [];
+const _flowConnections  = [];
+const _flowParticles    = [];
+
 function createStylizedLayerMesh(layer, color) {
   const group = new THREE.Group();
   const depth = layer.d * guiState.depthScale;
+  const col3  = new THREE.Color(color);
 
-  // Main tensor volume
+  // ── Core: glass physical material ────────────────────────────
   const coreGeometry = new THREE.BoxGeometry(layer.w, layer.h, depth);
-  const coreMaterial = new THREE.MeshStandardMaterial({
-    color,
-    transparent: true,
-    opacity: guiState.opacity,
-    roughness: 0.18,
-    metalness: 0.28,
-    emissive: color,
-    emissiveIntensity: 0.24,
+  const coreMaterial = new THREE.MeshPhysicalMaterial({
+    color:              col3,
+    transparent:        true,
+    opacity:            Math.max(guiState.opacity * 0.85, 0.38),
+    roughness:          0.04,
+    metalness:          0.08,
+    clearcoat:          1.0,
+    clearcoatRoughness: 0.05,
+    transmission:       0.22,
+    thickness:          depth,
+    ior:                1.45,
+    emissive:           col3,
+    emissiveIntensity:  0.32,
   });
   const core = new THREE.Mesh(coreGeometry, coreMaterial);
   group.add(core);
 
-  // Subtle internal tensor slices to avoid "flat AI-generated box" feel.
-  const sliceCount = Math.min(7, Math.max(3, Math.round(depth * 6)));
-  for (let idx = 1; idx < sliceCount; idx += 1) {
-    const z = -depth / 2 + (idx / sliceCount) * depth;
+  // ── Animated holographic scan lines (front face) ─────────────
+  const scanMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor:   { value: col3.clone() },
+      uTime:    { value: 0 },
+      uOpacity: { value: 0.85 },
+    },
+    vertexShader:   _scanVert,
+    fragmentShader: _scanFrag,
+    transparent:    true,
+    side:           THREE.DoubleSide,
+    depthWrite:     false,
+  });
+  _scanMaterials.push(scanMat);
+
+  const scanPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(layer.w, layer.h),
+    scanMat,
+  );
+  scanPlane.position.z = depth / 2 + 0.003;
+  group.add(scanPlane);
+
+  // ── Inner depth planes (tensor-stack illusion) ────────────────
+  for (let idx = 1; idx <= 6; idx += 1) {
+    const z = -depth / 2 + (idx / 7) * depth;
     const slice = new THREE.Mesh(
-      new THREE.PlaneGeometry(layer.w * 0.98, layer.h * 0.98),
+      new THREE.PlaneGeometry(layer.w * 0.97, layer.h * 0.97),
       new THREE.MeshBasicMaterial({
-        color,
+        color:       col3,
         transparent: true,
-        opacity: 0.05 + (idx / sliceCount) * 0.06,
-        side: THREE.DoubleSide,
+        opacity:     0.04 + (idx / 7) * 0.07,
+        side:        THREE.DoubleSide,
+        depthWrite:  false,
       }),
     );
     slice.position.z = z;
     core.add(slice);
   }
 
-  // Outer aura shell
-  const aura = new THREE.Mesh(
-    new THREE.BoxGeometry(layer.w * 1.03, layer.h * 1.03, depth * 1.15),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.1,
-      side: THREE.BackSide,
-    }),
-  );
-  group.add(aura);
-
-  // Crisp frame
+  // ── Bright primary edge wireframe ─────────────────────────────
   const edges = new THREE.LineSegments(
     new THREE.EdgesGeometry(coreGeometry),
-    new THREE.LineBasicMaterial({ color: '#dbeafe', transparent: true, opacity: 0.72 }),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 }),
   );
   core.add(edges);
 
+  // ── Soft secondary edges (bloom halo) ─────────────────────────
+  const auraGeo = new THREE.BoxGeometry(layer.w * 1.07, layer.h * 1.07, depth * 1.2);
+  const auraEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(auraGeo),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.28 }),
+  );
+  group.add(auraEdges);
+
+  // ── Close aura shell ──────────────────────────────────────────
+  group.add(new THREE.Mesh(
+    auraGeo,
+    new THREE.MeshBasicMaterial({
+      color:       col3,
+      transparent: true,
+      opacity:     0.10,
+      side:        THREE.BackSide,
+      depthWrite:  false,
+    }),
+  ));
+
+  // ── Wide glow shell (feeds bloom radius) ──────────────────────
+  group.add(new THREE.Mesh(
+    new THREE.BoxGeometry(layer.w * 1.22, layer.h * 1.22, depth * 1.55),
+    new THREE.MeshBasicMaterial({
+      color:       col3,
+      transparent: true,
+      opacity:     0.035,
+      side:        THREE.BackSide,
+      depthWrite:  false,
+    }),
+  ));
+
   return { group, core };
+}
+
+
+// ── Flow particle animation ───────────────────────────────────────
+const _particleGeo = new THREE.SphereGeometry(0.045, 6, 6);
+
+const _particleColors = [
+  new THREE.Color('#38bdf8'),
+  new THREE.Color('#818cf8'),
+  new THREE.Color('#f472b6'),
+  new THREE.Color('#34d399'),
+  new THREE.Color('#fbbf24'),
+];
+
+function spawnFlowParticles() {
+  const PER_CONN = 4;
+  _flowConnections.forEach((conn, ci) => {
+    const baseColor = _particleColors[ci % _particleColors.length];
+    for (let p = 0; p < PER_CONN; p += 1) {
+      const color = baseColor.clone().lerp(_particleColors[(ci + 1) % _particleColors.length], p / PER_CONN);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 });
+      const mesh = new THREE.Mesh(_particleGeo, mat);
+      const t0   = p / PER_CONN;
+      mesh.position.lerpVectors(conn.from, conn.to, t0);
+      scene.add(mesh);
+      _flowParticles.push({ mesh, conn, t: t0, speed: 0.26 + Math.random() * 0.22 });
+    }
+  });
 }
 
 function buildArchitecture(layers) {
   updateLegend(layers);
   clearGroup(layerGroup);
   clearGroup(connectionGroup);
+  _flowConnections.length = 0;
+  _flowParticles.forEach((p) => scene.remove(p.mesh));
+  _flowParticles.length = 0;
 
   const startX = -((layers.length - 1) * guiState.spacing) / 2;
   const points = [];
@@ -536,7 +656,12 @@ function buildArchitecture(layers) {
 
   for (let index = 0; index < points.length - 1; index += 1) {
     addArrow(points[index].out, points[index + 1].in);
+    _flowConnections.push({
+      from:  points[index].out.clone(),
+      to:    points[index + 1].in.clone(),
+    });
   }
+  spawnFlowParticles();
 
   camera.position.z = Math.max(32, 16 + layers.length * 1.55);
   camera.position.y = 3.5;
@@ -858,6 +983,7 @@ function resizeRenderer() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   renderer.setSize(width, height);
+  composer.setSize(width, height);
 }
 
 loadCnnBtn.addEventListener('click', () => {
@@ -952,6 +1078,16 @@ window.addEventListener('pointermove', (event) => {
 function animate() {
   requestAnimationFrame(animate);
   pulseClock += 0.018 * guiState.pulseSpeed;
+  _scanMaterials.forEach((m) => { m.uniforms.uTime.value = pulseClock; });
+
+  _flowParticles.forEach((p) => {
+    p.t += p.speed * 0.016;
+    if (p.t > 1.0) p.t -= 1.0;
+    p.mesh.position.lerpVectors(p.conn.from, p.conn.to, p.t);
+    p.mesh.position.y += Math.sin(p.t * Math.PI) * 0.18;
+    const fade = Math.min(p.t * 8, 1) * Math.min((1 - p.t) * 8, 1);
+    p.mesh.material.opacity = 0.85 * fade;
+  });
 
   fillLight.position.x = Math.sin(pulseClock * 0.6) * 9 + pointer.x * 2.5;
   fillLight.position.z = 7 + Math.cos(pulseClock * 0.45) * 5;
@@ -980,7 +1116,7 @@ function animate() {
     camera.position.z = Math.cos(spin) * radius;
   }
   controls.update();
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 loadPreset('cnn');
