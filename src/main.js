@@ -8,8 +8,12 @@ const app = document.querySelector('#app');
 app.innerHTML = `
   <div class="layout">
     <header class="header">
-      <h1>NN-Sketch 3D</h1>
-      <p>Clean architecture schematics with editable layer parameters.</p>
+      <div>
+        <span class="badge">Live 3D Model Design</span>
+        <h1>Neural Flow Studio</h1>
+        <p>Build model architectures with cinematic depth and fluid interactions.</p>
+      </div>
+      <div class="header-orb"></div>
     </header>
     <main class="workspace">
       <aside class="panel">
@@ -101,11 +105,11 @@ const layerTypeOptions = Object.keys(layerColors);
 let architectureState = structuredClone(presets.cnn.layers);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#f8fafc');
-scene.fog = new THREE.Fog('#f8fafc', 42, 74);
+scene.background = new THREE.Color('#070814');
+scene.fog = new THREE.Fog('#070814', 36, 90);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-camera.position.set(0, 3.8, 32);
+const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 260);
+camera.position.set(0, 4, 36);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -114,25 +118,29 @@ viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.minDistance = 14;
-controls.maxDistance = 95;
+controls.minDistance = 15;
+controls.maxDistance = 100;
 controls.enablePan = true;
-controls.target.set(0, 0.5, 0);
+controls.target.set(0, 0.3, 0);
 
-const ambient = new THREE.AmbientLight('#ffffff', 0.88);
+const ambient = new THREE.AmbientLight('#dbeafe', 0.35);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight('#ffffff', 0.52);
-keyLight.position.set(8, 14, 18);
+const keyLight = new THREE.DirectionalLight('#60a5fa', 1.2);
+keyLight.position.set(12, 12, 22);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight('#f8fafc', 0.35);
-rimLight.position.set(-10, 6, -12);
+const rimLight = new THREE.DirectionalLight('#c084fc', 1.0);
+rimLight.position.set(-14, 8, -14);
 scene.add(rimLight);
 
-const grid = new THREE.GridHelper(120, 60, '#d4d4d8', '#e4e4e7');
-grid.position.y = -3.8;
-grid.material.opacity = 0.5;
+const fillLight = new THREE.PointLight('#22d3ee', 1.2, 90);
+fillLight.position.set(0, 8, 8);
+scene.add(fillLight);
+
+const grid = new THREE.GridHelper(140, 70, '#334155', '#0f172a');
+grid.position.y = -4.1;
+grid.material.opacity = 0.28;
 grid.material.transparent = true;
 scene.add(grid);
 
@@ -143,16 +151,20 @@ const connectionGroup = new THREE.Group();
 scene.add(connectionGroup);
 
 const guiState = {
-  spacing: 2.4,
-  opacity: 0.2,
-  depthScale: 0.85,
+  spacing: 2.5,
+  opacity: 0.5,
+  depthScale: 0.95,
+  wave: 0.65,
+  pulseSpeed: 0.9,
   rotate: false,
 };
 
 const gui = new GUI({ title: 'Schematic Controls' });
 gui.add(guiState, 'spacing', 1.5, 4.5, 0.05).name('Layer Spacing');
-gui.add(guiState, 'opacity', 0.05, 0.55, 0.01).name('Tensor Opacity');
+gui.add(guiState, 'opacity', 0.12, 0.9, 0.01).name('Tensor Opacity');
 gui.add(guiState, 'depthScale', 0.4, 1.4, 0.05).name('Depth Scale');
+gui.add(guiState, 'wave', 0, 1.8, 0.01).name('Flow Wave');
+gui.add(guiState, 'pulseSpeed', 0.2, 2.2, 0.01).name('Pulse Speed');
 gui.add(guiState, 'rotate').name('Auto Orbit');
 gui.close();
 
@@ -162,8 +174,10 @@ function makeTextSprite(labelText) {
   canvas.height = 86;
   const context = canvas.getContext('2d');
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.font = '500 34px Segoe UI';
-  context.fillStyle = '#27272a';
+  context.font = '600 34px Segoe UI';
+  context.fillStyle = '#e2e8f0';
+  context.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  context.shadowBlur = 7;
   context.fillText(labelText, 12, 55);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -214,7 +228,7 @@ function addArrow(start, end) {
   const shaftLength = Math.max(0.2, length - 0.28);
   const shaft = new THREE.Mesh(
     new THREE.CylinderGeometry(0.028, 0.028, shaftLength, 8),
-    new THREE.MeshBasicMaterial({ color: '#3f3f46' }),
+    new THREE.MeshBasicMaterial({ color: '#7dd3fc', transparent: true, opacity: 0.6 }),
   );
   shaft.position.copy(start).addScaledVector(direction, shaftLength / 2);
   shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
@@ -222,7 +236,7 @@ function addArrow(start, end) {
 
   const head = new THREE.Mesh(
     new THREE.ConeGeometry(0.08, 0.22, 8),
-    new THREE.MeshBasicMaterial({ color: '#18181b' }),
+    new THREE.MeshBasicMaterial({ color: '#c4b5fd', transparent: true, opacity: 0.8 }),
   );
   head.position.copy(start).addScaledVector(direction, shaftLength + 0.11);
   head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
@@ -244,19 +258,23 @@ function buildArchitecture(layers) {
       color: layerColors[layer.type] || '#94a3b8',
       transparent: true,
       opacity: guiState.opacity,
-      roughness: 1,
-      metalness: 0,
+      roughness: 0.35,
+      metalness: 0.12,
+      emissive: layerColors[layer.type] || '#94a3b8',
+      emissiveIntensity: 0.2,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.x = startX + index * guiState.spacing;
-    mesh.position.y = baseY;
-    mesh.rotation.y = -0.2;
+    mesh.position.y = baseY + Math.sin(index * 0.6) * 0.15 * guiState.wave;
+    mesh.rotation.y = -0.32;
+    mesh.userData.baseY = mesh.position.y;
+    mesh.userData.index = index;
     layerGroup.add(mesh);
 
     const edge = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: '#111827', transparent: true, opacity: 0.7 }),
+      new THREE.LineBasicMaterial({ color: '#e2e8f0', transparent: true, opacity: 0.55 }),
     );
     mesh.add(edge);
 
@@ -265,8 +283,8 @@ function buildArchitecture(layers) {
     mesh.add(label);
 
     points.push({
-      in: new THREE.Vector3(mesh.position.x - layer.w / 2, baseY, 0),
-      out: new THREE.Vector3(mesh.position.x + layer.w / 2, baseY, 0),
+      in: new THREE.Vector3(mesh.position.x - layer.w / 2, mesh.position.y, 0),
+      out: new THREE.Vector3(mesh.position.x + layer.w / 2, mesh.position.y, 0),
     });
   });
 
@@ -274,7 +292,7 @@ function buildArchitecture(layers) {
     addArrow(points[index].out, points[index + 1].in);
   }
 
-  camera.position.z = Math.max(30, 16 + layers.length * 1.4);
+  camera.position.z = Math.max(32, 16 + layers.length * 1.55);
   camera.position.y = 3.5;
   controls.target.set(0, 0.2, 0);
 }
@@ -463,8 +481,36 @@ gui.onChange(() => {
 window.addEventListener('resize', resizeRenderer);
 
 let spin = 0;
+let pulseClock = 0;
+const pointer = { x: 0, y: 0 };
+
+window.addEventListener('pointermove', (event) => {
+  const rect = viewport.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+});
+
 function animate() {
   requestAnimationFrame(animate);
+  pulseClock += 0.018 * guiState.pulseSpeed;
+
+  fillLight.position.x = Math.sin(pulseClock * 0.6) * 9 + pointer.x * 2.5;
+  fillLight.position.z = 7 + Math.cos(pulseClock * 0.45) * 5;
+  keyLight.position.x = 12 + pointer.x * 4;
+  keyLight.position.y = 12 + pointer.y * 2;
+
+  layerGroup.children.forEach((mesh) => {
+    if (!(mesh instanceof THREE.Mesh)) return;
+    const wobble = Math.sin(pulseClock + mesh.userData.index * 0.8) * 0.07 * guiState.wave;
+    mesh.position.y = mesh.userData.baseY + wobble;
+    mesh.material.emissiveIntensity = 0.12 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.08;
+  });
+
+  connectionGroup.children.forEach((part, index) => {
+    if (!part.material) return;
+    part.material.opacity = 0.35 + (Math.sin(pulseClock * 1.9 + index * 0.5) + 1) * 0.18;
+  });
+
   if (guiState.rotate) {
     spin += 0.0024;
     const radius = Math.max(30, 16 + architectureState.length * 1.4);
