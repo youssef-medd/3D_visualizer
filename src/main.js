@@ -64,22 +64,35 @@ app.innerHTML = `
           <div class="control-list">
             <label class="control-row">Layer Spacing
               <input id="spacing-control" type="range" min="1.5" max="4.8" step="0.05" value="2.6" />
+              <span id="spacing-value">2.60</span>
             </label>
             <label class="control-row">Tensor Opacity
               <input id="opacity-control" type="range" min="0.14" max="0.95" step="0.01" value="0.62" />
+              <span id="opacity-value">0.62</span>
             </label>
             <label class="control-row">Depth Scale
               <input id="depth-control" type="range" min="0.4" max="1.7" step="0.05" value="1" />
+              <span id="depth-value">1.00</span>
             </label>
             <label class="control-row">Flow Wave
               <input id="wave-control" type="range" min="0" max="2" step="0.01" value="0.9" />
+              <span id="wave-value">0.90</span>
             </label>
             <label class="control-row">Pulse Speed
               <input id="pulse-control" type="range" min="0.2" max="2.4" step="0.01" value="1.1" />
+              <span id="pulse-value">1.10</span>
             </label>
             <label class="toggle-row">
               <input id="rotate-control" type="checkbox" />
               Auto Orbit
+            </label>
+            <label class="toggle-row">
+              <input id="wireframe-control" type="checkbox" />
+              Wireframe Blocks
+            </label>
+            <label class="toggle-row">
+              <input id="ghost-control" type="checkbox" checked />
+              Ghost Connections
             </label>
           </div>
         </div>
@@ -135,6 +148,13 @@ const depthControl = document.querySelector('#depth-control');
 const waveControl = document.querySelector('#wave-control');
 const pulseControl = document.querySelector('#pulse-control');
 const rotateControl = document.querySelector('#rotate-control');
+const wireframeControl = document.querySelector('#wireframe-control');
+const ghostControl = document.querySelector('#ghost-control');
+const spacingValue = document.querySelector('#spacing-value');
+const opacityValue = document.querySelector('#opacity-value');
+const depthValue = document.querySelector('#depth-value');
+const waveValue = document.querySelector('#wave-value');
+const pulseValue = document.querySelector('#pulse-value');
 const diagnosticsList = document.querySelector('#diagnostics-list');
 const shapeSummary = document.querySelector('#shape-summary');
 const validationState = document.querySelector('#validation-state');
@@ -452,6 +472,8 @@ const guiState = {
   wave: 0.9,
   pulseSpeed: 1.1,
   rotate: false,
+  wireframe: false,
+  ghost: true,
 };
 
 function makeTextSprite(labelText) {
@@ -506,6 +528,7 @@ function updateLegend(layers) {
 }
 
 function addArrow(start, end) {
+  if (!guiState.ghost) return;
   const direction = new THREE.Vector3().subVectors(end, start);
   const length = direction.length();
   if (length < 0.05) return;
@@ -543,6 +566,7 @@ function createStylizedLayerMesh(layer, color) {
     metalness: 0.28,
     emissive: color,
     emissiveIntensity: 0.24,
+    wireframe: guiState.wireframe,
   });
   const core = new THREE.Mesh(coreGeometry, coreMaterial);
   group.add(core);
@@ -1025,6 +1049,13 @@ function syncControlsToScene() {
   guiState.wave = Number(waveControl.value);
   guiState.pulseSpeed = Number(pulseControl.value);
   guiState.rotate = rotateControl.checked;
+  guiState.wireframe = wireframeControl.checked;
+  guiState.ghost = ghostControl.checked;
+  spacingValue.textContent = guiState.spacing.toFixed(2);
+  opacityValue.textContent = guiState.opacity.toFixed(2);
+  depthValue.textContent = guiState.depthScale.toFixed(2);
+  waveValue.textContent = guiState.wave.toFixed(2);
+  pulseValue.textContent = guiState.pulseSpeed.toFixed(2);
   rerenderScene();
 }
 
@@ -1035,6 +1066,8 @@ function syncControlsToScene() {
   waveControl,
   pulseControl,
   rotateControl,
+  wireframeControl,
+  ghostControl,
 ].forEach((control) => {
   control.addEventListener('input', syncControlsToScene);
   control.addEventListener('change', syncControlsToScene);

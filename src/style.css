@@ -378,6 +378,14 @@ body::before {
 }
 .control-row:hover { border-color: rgba(99,179,237,.3); }
 
+.control-row span {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: #93c5fd;
+}
+
 .control-row input[type='range'] {
   width: 100%;
   margin-top: 7px;
