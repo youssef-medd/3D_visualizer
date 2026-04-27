@@ -1,24 +1,32 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import GUI from 'lil-gui';
 
 const app = document.querySelector('#app');
 
 app.innerHTML = `
   <div class="layout">
     <header class="header">
-      <div>
-        <span class="badge">Live 3D Model Design</span>
-        <h1>Neural Flow Studio</h1>
-        <p>Build model architectures with cinematic depth and fluid interactions.</p>
+      <div class="header-content">
+        <span class="badge">Neural Architecture Playground</span>
+        <h1>Model Atlas 3D</h1>
+        <p>Craft expressive CNN and Transformer diagrams with precise, interactive control.</p>
       </div>
-      <div class="header-orb"></div>
+      <div class="header-metrics">
+        <div class="metric">
+          <span>Mode</span>
+          <strong>Editable</strong>
+        </div>
+        <div class="metric">
+          <span>Render</span>
+          <strong>Real-Time</strong>
+        </div>
+      </div>
     </header>
     <main class="workspace">
       <aside class="panel">
         <div class="panel-card">
-          <h2>Architecture Builder</h2>
+          <h2>Architecture</h2>
           <div class="inline-actions">
             <button id="load-cnn" class="btn">Load CNN</button>
             <button id="load-transformer" class="btn">Load Transformer</button>
@@ -28,6 +36,30 @@ app.innerHTML = `
             <button id="clear-layers" class="btn btn-danger">Clear</button>
           </div>
           <p id="preset-desc">Pick a preset then refine each layer manually.</p>
+        </div>
+        <div class="panel-card">
+          <h2>Visual Controls</h2>
+          <div class="control-list">
+            <label class="control-row">Layer Spacing
+              <input id="spacing-control" type="range" min="1.5" max="4.8" step="0.05" value="2.6" />
+            </label>
+            <label class="control-row">Tensor Opacity
+              <input id="opacity-control" type="range" min="0.14" max="0.95" step="0.01" value="0.62" />
+            </label>
+            <label class="control-row">Depth Scale
+              <input id="depth-control" type="range" min="0.4" max="1.7" step="0.05" value="1" />
+            </label>
+            <label class="control-row">Flow Wave
+              <input id="wave-control" type="range" min="0" max="2" step="0.01" value="0.9" />
+            </label>
+            <label class="control-row">Pulse Speed
+              <input id="pulse-control" type="range" min="0.2" max="2.4" step="0.01" value="1.1" />
+            </label>
+            <label class="toggle-row">
+              <input id="rotate-control" type="checkbox" />
+              Auto Orbit
+            </label>
+          </div>
         </div>
         <div class="panel-card">
           <h2>Layers</h2>
@@ -53,20 +85,26 @@ const presetDescription = document.querySelector('#preset-desc');
 const legendList = document.querySelector('#legend-list');
 const layerEditor = document.querySelector('#layer-editor');
 const viewport = document.querySelector('#viewport');
+const spacingControl = document.querySelector('#spacing-control');
+const opacityControl = document.querySelector('#opacity-control');
+const depthControl = document.querySelector('#depth-control');
+const waveControl = document.querySelector('#wave-control');
+const pulseControl = document.querySelector('#pulse-control');
+const rotateControl = document.querySelector('#rotate-control');
 
 const layerColors = {
-  input: '#f5f5f5',
-  conv: '#90caf9',
-  pool: '#ffcc80',
-  norm: '#ce93d8',
-  dense: '#a5d6a7',
-  output: '#ef9a9a',
-  token: '#b3e5fc',
-  positional: '#ffccbc',
-  attention: '#f8bbd0',
-  ffn: '#c8e6c9',
-  residual: '#d1c4e9',
-  head: '#ffab91',
+  input: '#93c5fd',
+  conv: '#f9a8d4',
+  pool: '#fcd34d',
+  norm: '#c4b5fd',
+  dense: '#86efac',
+  output: '#fda4af',
+  token: '#67e8f9',
+  positional: '#fdba74',
+  attention: '#f9a8d4',
+  ffn: '#6ee7b7',
+  residual: '#d8b4fe',
+  head: '#fb7185',
 };
 
 const presets = {
@@ -105,8 +143,8 @@ const layerTypeOptions = Object.keys(layerColors);
 let architectureState = structuredClone(presets.cnn.layers);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#070814');
-scene.fog = new THREE.Fog('#070814', 36, 90);
+scene.background = new THREE.Color('#050713');
+scene.fog = new THREE.Fog('#050713', 34, 96);
 
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 260);
 camera.position.set(0, 4, 36);
@@ -123,7 +161,7 @@ controls.maxDistance = 100;
 controls.enablePan = true;
 controls.target.set(0, 0.3, 0);
 
-const ambient = new THREE.AmbientLight('#dbeafe', 0.35);
+const ambient = new THREE.AmbientLight('#e2e8f0', 0.28);
 scene.add(ambient);
 
 const keyLight = new THREE.DirectionalLight('#60a5fa', 1.2);
@@ -138,9 +176,22 @@ const fillLight = new THREE.PointLight('#22d3ee', 1.2, 90);
 fillLight.position.set(0, 8, 8);
 scene.add(fillLight);
 
-const grid = new THREE.GridHelper(140, 70, '#334155', '#0f172a');
+const floorGlow = new THREE.Mesh(
+  new THREE.PlaneGeometry(180, 180),
+  new THREE.MeshBasicMaterial({
+    color: '#0b1026',
+    transparent: true,
+    opacity: 0.45,
+    side: THREE.DoubleSide,
+  }),
+);
+floorGlow.rotation.x = Math.PI / 2;
+floorGlow.position.y = -4.2;
+scene.add(floorGlow);
+
+const grid = new THREE.GridHelper(150, 90, '#374151', '#111827');
 grid.position.y = -4.1;
-grid.material.opacity = 0.28;
+grid.material.opacity = 0.33;
 grid.material.transparent = true;
 scene.add(grid);
 
@@ -151,34 +202,25 @@ const connectionGroup = new THREE.Group();
 scene.add(connectionGroup);
 
 const guiState = {
-  spacing: 2.5,
-  opacity: 0.5,
-  depthScale: 0.95,
-  wave: 0.65,
-  pulseSpeed: 0.9,
+  spacing: 2.6,
+  opacity: 0.62,
+  depthScale: 1.0,
+  wave: 0.9,
+  pulseSpeed: 1.1,
   rotate: false,
 };
 
-const gui = new GUI({ title: 'Schematic Controls' });
-gui.add(guiState, 'spacing', 1.5, 4.5, 0.05).name('Layer Spacing');
-gui.add(guiState, 'opacity', 0.12, 0.9, 0.01).name('Tensor Opacity');
-gui.add(guiState, 'depthScale', 0.4, 1.4, 0.05).name('Depth Scale');
-gui.add(guiState, 'wave', 0, 1.8, 0.01).name('Flow Wave');
-gui.add(guiState, 'pulseSpeed', 0.2, 2.2, 0.01).name('Pulse Speed');
-gui.add(guiState, 'rotate').name('Auto Orbit');
-gui.close();
-
 function makeTextSprite(labelText) {
   const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 86;
+  canvas.width = 700;
+  canvas.height = 92;
   const context = canvas.getContext('2d');
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.font = '600 34px Segoe UI';
+  context.font = '600 30px Segoe UI';
   context.fillStyle = '#e2e8f0';
   context.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  context.shadowBlur = 7;
-  context.fillText(labelText, 12, 55);
+  context.shadowBlur = 10;
+  context.fillText(labelText, 12, 58);
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({
@@ -187,7 +229,7 @@ function makeTextSprite(labelText) {
     depthWrite: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(7, 0.95, 1);
+  sprite.scale.set(7.2, 0.92, 1);
   return sprite;
 }
 
@@ -227,16 +269,16 @@ function addArrow(start, end) {
 
   const shaftLength = Math.max(0.2, length - 0.28);
   const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.028, 0.028, shaftLength, 8),
-    new THREE.MeshBasicMaterial({ color: '#7dd3fc', transparent: true, opacity: 0.6 }),
+    new THREE.CylinderGeometry(0.03, 0.03, shaftLength, 8),
+    new THREE.MeshBasicMaterial({ color: '#7dd3fc', transparent: true, opacity: 0.75 }),
   );
   shaft.position.copy(start).addScaledVector(direction, shaftLength / 2);
   shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
   connectionGroup.add(shaft);
 
   const head = new THREE.Mesh(
-    new THREE.ConeGeometry(0.08, 0.22, 8),
-    new THREE.MeshBasicMaterial({ color: '#c4b5fd', transparent: true, opacity: 0.8 }),
+    new THREE.ConeGeometry(0.09, 0.24, 8),
+    new THREE.MeshBasicMaterial({ color: '#c4b5fd', transparent: true, opacity: 0.88 }),
   );
   head.position.copy(start).addScaledVector(direction, shaftLength + 0.11);
   head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
@@ -254,14 +296,15 @@ function buildArchitecture(layers) {
 
   layers.forEach((layer, index) => {
     const geometry = new THREE.BoxGeometry(layer.w, layer.h, layer.d * guiState.depthScale);
+    const color = layerColors[layer.type] || '#94a3b8';
     const material = new THREE.MeshStandardMaterial({
-      color: layerColors[layer.type] || '#94a3b8',
+      color,
       transparent: true,
       opacity: guiState.opacity,
-      roughness: 0.35,
-      metalness: 0.12,
-      emissive: layerColors[layer.type] || '#94a3b8',
-      emissiveIntensity: 0.2,
+      roughness: 0.24,
+      metalness: 0.2,
+      emissive: color,
+      emissiveIntensity: 0.24,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -272,9 +315,20 @@ function buildArchitecture(layers) {
     mesh.userData.index = index;
     layerGroup.add(mesh);
 
+    const aura = new THREE.Mesh(
+      new THREE.BoxGeometry(layer.w * 1.03, layer.h * 1.03, layer.d * guiState.depthScale * 1.12),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.09,
+        side: THREE.BackSide,
+      }),
+    );
+    mesh.add(aura);
+
     const edge = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: '#e2e8f0', transparent: true, opacity: 0.55 }),
+      new THREE.LineBasicMaterial({ color: '#dbeafe', transparent: true, opacity: 0.62 }),
     );
     mesh.add(edge);
 
@@ -474,8 +528,26 @@ clearLayersBtn.addEventListener('click', () => {
   rerenderScene();
 });
 
-gui.onChange(() => {
+function syncControlsToScene() {
+  guiState.spacing = Number(spacingControl.value);
+  guiState.opacity = Number(opacityControl.value);
+  guiState.depthScale = Number(depthControl.value);
+  guiState.wave = Number(waveControl.value);
+  guiState.pulseSpeed = Number(pulseControl.value);
+  guiState.rotate = rotateControl.checked;
   rerenderScene();
+}
+
+[
+  spacingControl,
+  opacityControl,
+  depthControl,
+  waveControl,
+  pulseControl,
+  rotateControl,
+].forEach((control) => {
+  control.addEventListener('input', syncControlsToScene);
+  control.addEventListener('change', syncControlsToScene);
 });
 
 window.addEventListener('resize', resizeRenderer);
@@ -498,12 +570,14 @@ function animate() {
   fillLight.position.z = 7 + Math.cos(pulseClock * 0.45) * 5;
   keyLight.position.x = 12 + pointer.x * 4;
   keyLight.position.y = 12 + pointer.y * 2;
+  rimLight.intensity = 0.86 + Math.sin(pulseClock * 0.8) * 0.12;
 
   layerGroup.children.forEach((mesh) => {
     if (!(mesh instanceof THREE.Mesh)) return;
     const wobble = Math.sin(pulseClock + mesh.userData.index * 0.8) * 0.07 * guiState.wave;
     mesh.position.y = mesh.userData.baseY + wobble;
-    mesh.material.emissiveIntensity = 0.12 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.08;
+    mesh.material.emissiveIntensity =
+      0.15 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.1;
   });
 
   connectionGroup.children.forEach((part, index) => {
@@ -522,5 +596,6 @@ function animate() {
 }
 
 loadPreset('cnn');
+syncControlsToScene();
 resizeRenderer();
 animate();
