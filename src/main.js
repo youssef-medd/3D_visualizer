@@ -115,6 +115,15 @@ app.innerHTML = `
       </aside>
       <section class="viewport-wrap">
         <div id="viewport"></div>
+        <div class="hud-bar">
+          <span id="hud-mode">CNN</span>
+          <span class="hud-sep"></span>
+          <span id="hud-layers">0 layers</span>
+          <span class="hud-sep"></span>
+          <span id="hud-params">~0 params</span>
+          <span class="hud-sep"></span>
+          <span>Drag to orbit · Scroll to zoom</span>
+        </div>
       </section>
       <aside class="panel right-panel">
         <div class="panel-card">
@@ -165,6 +174,9 @@ const layerCountChip = document.querySelector('#layer-count-chip');
 const modeChip = document.querySelector('#mode-chip');
 const insightsBody = document.querySelector('#insights-body');
 const layerDetail = document.querySelector('#layer-detail');
+const hudMode = document.querySelector('#hud-mode');
+const hudLayers = document.querySelector('#hud-layers');
+const hudParams = document.querySelector('#hud-params');
 
 const layerColors = {
   input: '#93c5fd',
@@ -376,6 +388,40 @@ function updateTopbarStatus() {
   modeChip.textContent = architectureMode === 'cnn' ? 'CNN' : 'Transformer';
   presetCnnBtn.classList.toggle('active', architectureMode === 'cnn');
   presetTransformerBtn.classList.toggle('active', architectureMode === 'transformer');
+}
+
+function estimateParams() {
+  let total = 0;
+  let currentChannels = 3;
+  architectureState.forEach((layer) => {
+    const p = layer.params || {};
+    if (layer.type === 'input') currentChannels = Number(p.c || 3);
+    if (layer.type === 'conv') {
+      const k = Number(p.k || 3);
+      const filters = Number(p.filters || 64);
+      total += k * k * currentChannels * filters + filters;
+      currentChannels = filters;
+    }
+    if (layer.type === 'dense') total += currentChannels * Number(p.units || 512);
+    if (layer.type === 'attention') {
+      const dModel = Number(p.dModel || 512);
+      total += 4 * dModel * dModel;
+    }
+    if (layer.type === 'ffn') {
+      const hidden = Number(p.hidden || 2048);
+      const dModel = Number(p.dModel || 512);
+      total += dModel * hidden + hidden * dModel;
+    }
+  });
+  if (total > 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
+  if (total > 1_000) return `${(total / 1_000).toFixed(1)}K`;
+  return String(total);
+}
+
+function updateHudBar() {
+  hudMode.textContent = architectureMode === 'cnn' ? 'CNN' : 'Transformer';
+  hudLayers.textContent = `${architectureState.length} layers`;
+  hudParams.textContent = `~${estimateParams()} params`;
 }
 
 function renderInsights() {
@@ -663,6 +709,7 @@ function rerenderScene() {
   lastShapeInfo = validation.shapes;
   updateDiagnostics(validation);
   updateTopbarStatus();
+  updateHudBar();
   renderInsights();
   renderLayerDetail();
   buildArchitecture(architectureState);
