@@ -9,18 +9,25 @@ app.innerHTML = `
   <div class="layout">
     <header class="header">
       <h1>Neural Architecture 3D Visualizer</h1>
-      <p>Explore spatial layer progression for CNNs and Transformers.</p>
+      <p>Design your own CNN or Transformer-like architecture in 3D.</p>
     </header>
     <main class="workspace">
       <aside class="panel">
         <div class="panel-card">
-          <h2>Architecture</h2>
-          <label for="preset">Preset</label>
-          <select id="preset">
-            <option value="cnn">CNN Classifier</option>
-            <option value="transformer">Transformer Encoder</option>
-          </select>
-          <p id="preset-desc"></p>
+          <h2>Architecture Builder</h2>
+          <div class="inline-actions">
+            <button id="load-cnn" class="btn">Load CNN</button>
+            <button id="load-transformer" class="btn">Load Transformer</button>
+          </div>
+          <div class="inline-actions">
+            <button id="add-layer" class="btn btn-primary">Add Layer</button>
+            <button id="clear-layers" class="btn btn-danger">Clear</button>
+          </div>
+          <p id="preset-desc">Edit layers and parameters below.</p>
+        </div>
+        <div class="panel-card">
+          <h2>Layers</h2>
+          <div id="layer-editor"></div>
         </div>
         <div class="panel-card legend">
           <h2>Layer Legend</h2>
@@ -34,9 +41,13 @@ app.innerHTML = `
   </div>
 `;
 
-const presetSelect = document.querySelector('#preset');
+const loadCnnBtn = document.querySelector('#load-cnn');
+const loadTransformerBtn = document.querySelector('#load-transformer');
+const addLayerBtn = document.querySelector('#add-layer');
+const clearLayersBtn = document.querySelector('#clear-layers');
 const presetDescription = document.querySelector('#preset-desc');
 const legendList = document.querySelector('#legend-list');
+const layerEditor = document.querySelector('#layer-editor');
 const viewport = document.querySelector('#viewport');
 
 const layerColors = {
@@ -56,8 +67,7 @@ const layerColors = {
 
 const presets = {
   cnn: {
-    description: 'Classic image classifier pipeline from input to softmax logits.',
-    cameraZ: 26,
+    description: 'CNN preset loaded. Edit names, types, and dimensions freely.',
     layers: [
       { name: 'Input 224x224x3', type: 'input', w: 6, h: 6, d: 0.6 },
       { name: 'Conv 7x7, 64', type: 'conv', w: 5.4, h: 5.4, d: 0.9 },
@@ -71,8 +81,7 @@ const presets = {
     ],
   },
   transformer: {
-    description: 'Tokenized sequence flow through encoder blocks and prediction head.',
-    cameraZ: 30,
+    description: 'Transformer preset loaded. Tune blocks to match your model.',
     layers: [
       { name: 'Token Embedding', type: 'token', w: 6.3, h: 2.0, d: 1.0 },
       { name: 'Positional Encoding', type: 'positional', w: 6.0, h: 1.8, d: 0.7 },
@@ -87,6 +96,9 @@ const presets = {
     ],
   },
 };
+
+const layerTypeOptions = Object.keys(layerColors);
+let architectureState = structuredClone(presets.cnn.layers);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#060917');
@@ -194,17 +206,15 @@ function updateLegend(layers) {
   });
 }
 
-function buildArchitecture(presetName) {
-  const preset = presets[presetName];
-  presetDescription.textContent = preset.description;
-  updateLegend(preset.layers);
+function buildArchitecture(layers) {
+  updateLegend(layers);
   clearGroup(layerGroup);
   clearGroup(connectionGroup);
 
-  const startX = -((preset.layers.length - 1) * guiState.explode) / 2;
+  const startX = -((layers.length - 1) * guiState.explode) / 2;
   const points = [];
 
-  preset.layers.forEach((layer, index) => {
+  layers.forEach((layer, index) => {
     const geometry = new THREE.BoxGeometry(layer.w, layer.h, layer.d);
     const material = new THREE.MeshStandardMaterial({
       color: layerColors[layer.type] || '#94a3b8',
@@ -245,9 +255,153 @@ function buildArchitecture(presetName) {
   const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
   connectionGroup.add(tube);
 
-  camera.position.z = preset.cameraZ;
+  camera.position.z = Math.max(20, 14 + layers.length * 1.2);
   camera.position.y = 4.2;
   controls.target.set(0, 0, 0);
+}
+
+function rerenderScene() {
+  if (!architectureState.length) {
+    clearGroup(layerGroup);
+    clearGroup(connectionGroup);
+    legendList.innerHTML = '<li>No layers defined</li>';
+    return;
+  }
+  buildArchitecture(architectureState);
+}
+
+function createField(labelText, value, onChange, { min = 0.2, max = 10, step = 0.1 } = {}) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  row.appendChild(label);
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = String(value);
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+  input.addEventListener('input', () => {
+    const parsed = Number(input.value);
+    if (!Number.isFinite(parsed)) return;
+    onChange(parsed);
+  });
+  row.appendChild(input);
+  return row;
+}
+
+function renderLayerEditor() {
+  layerEditor.innerHTML = '';
+
+  architectureState.forEach((layer, index) => {
+    const card = document.createElement('div');
+    card.className = 'layer-card';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'layer-top';
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = layer.name;
+    nameInput.className = 'name-input';
+    nameInput.addEventListener('input', () => {
+      architectureState[index].name = nameInput.value || `Layer ${index + 1}`;
+      rerenderScene();
+    });
+    topRow.appendChild(nameInput);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn btn-danger';
+    removeBtn.textContent = 'Delete';
+    removeBtn.addEventListener('click', () => {
+      architectureState.splice(index, 1);
+      renderLayerEditor();
+      rerenderScene();
+    });
+    topRow.appendChild(removeBtn);
+    card.appendChild(topRow);
+
+    const typeField = document.createElement('div');
+    typeField.className = 'field-row';
+    const typeLabel = document.createElement('label');
+    typeLabel.textContent = 'Type';
+    const typeSelect = document.createElement('select');
+    layerTypeOptions.forEach((option) => {
+      const opt = document.createElement('option');
+      opt.value = option;
+      opt.textContent = option;
+      if (option === layer.type) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+    typeSelect.addEventListener('change', () => {
+      architectureState[index].type = typeSelect.value;
+      rerenderScene();
+    });
+    typeField.append(typeLabel, typeSelect);
+    card.appendChild(typeField);
+
+    card.appendChild(
+      createField('Width', layer.w, (value) => {
+        architectureState[index].w = Math.max(0.2, value);
+        rerenderScene();
+      }),
+    );
+    card.appendChild(
+      createField('Height', layer.h, (value) => {
+        architectureState[index].h = Math.max(0.2, value);
+        rerenderScene();
+      }),
+    );
+    card.appendChild(
+      createField('Depth', layer.d, (value) => {
+        architectureState[index].d = Math.max(0.2, value);
+        rerenderScene();
+      }),
+    );
+
+    const moveRow = document.createElement('div');
+    moveRow.className = 'inline-actions';
+
+    const upBtn = document.createElement('button');
+    upBtn.className = 'btn';
+    upBtn.textContent = 'Up';
+    upBtn.disabled = index === 0;
+    upBtn.addEventListener('click', () => {
+      [architectureState[index - 1], architectureState[index]] = [
+        architectureState[index],
+        architectureState[index - 1],
+      ];
+      renderLayerEditor();
+      rerenderScene();
+    });
+
+    const downBtn = document.createElement('button');
+    downBtn.className = 'btn';
+    downBtn.textContent = 'Down';
+    downBtn.disabled = index === architectureState.length - 1;
+    downBtn.addEventListener('click', () => {
+      [architectureState[index + 1], architectureState[index]] = [
+        architectureState[index],
+        architectureState[index + 1],
+      ];
+      renderLayerEditor();
+      rerenderScene();
+    });
+
+    moveRow.append(upBtn, downBtn);
+    card.appendChild(moveRow);
+    layerEditor.appendChild(card);
+  });
+}
+
+function loadPreset(presetName) {
+  architectureState = structuredClone(presets[presetName].layers);
+  presetDescription.textContent = presets[presetName].description;
+  renderLayerEditor();
+  rerenderScene();
 }
 
 function resizeRenderer() {
@@ -257,12 +411,34 @@ function resizeRenderer() {
   renderer.setSize(width, height);
 }
 
-presetSelect.addEventListener('change', (event) => {
-  buildArchitecture(event.target.value);
+loadCnnBtn.addEventListener('click', () => {
+  loadPreset('cnn');
+});
+
+loadTransformerBtn.addEventListener('click', () => {
+  loadPreset('transformer');
+});
+
+addLayerBtn.addEventListener('click', () => {
+  architectureState.push({
+    name: `Layer ${architectureState.length + 1}`,
+    type: 'conv',
+    w: 3,
+    h: 3,
+    d: 0.8,
+  });
+  renderLayerEditor();
+  rerenderScene();
+});
+
+clearLayersBtn.addEventListener('click', () => {
+  architectureState = [];
+  renderLayerEditor();
+  rerenderScene();
 });
 
 gui.onChange(() => {
-  buildArchitecture(presetSelect.value);
+  rerenderScene();
 });
 
 window.addEventListener('resize', resizeRenderer);
@@ -280,6 +456,6 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-buildArchitecture('cnn');
+loadPreset('cnn');
 resizeRenderer();
 animate();
