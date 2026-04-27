@@ -8,8 +8,8 @@ const app = document.querySelector('#app');
 app.innerHTML = `
   <div class="layout">
     <header class="header">
-      <h1>Neural Architecture 3D Visualizer</h1>
-      <p>Design your own CNN or Transformer-like architecture in 3D.</p>
+      <h1>NN-Sketch 3D</h1>
+      <p>Clean architecture schematics with editable layer parameters.</p>
     </header>
     <main class="workspace">
       <aside class="panel">
@@ -23,7 +23,7 @@ app.innerHTML = `
             <button id="add-layer" class="btn btn-primary">Add Layer</button>
             <button id="clear-layers" class="btn btn-danger">Clear</button>
           </div>
-          <p id="preset-desc">Edit layers and parameters below.</p>
+          <p id="preset-desc">Pick a preset then refine each layer manually.</p>
         </div>
         <div class="panel-card">
           <h2>Layers</h2>
@@ -51,18 +51,18 @@ const layerEditor = document.querySelector('#layer-editor');
 const viewport = document.querySelector('#viewport');
 
 const layerColors = {
-  input: '#7dd3fc',
-  conv: '#f9a8d4',
-  pool: '#facc15',
-  norm: '#c4b5fd',
-  dense: '#fca5a5',
-  output: '#34d399',
-  token: '#93c5fd',
-  positional: '#fdba74',
-  attention: '#f9a8d4',
-  ffn: '#a7f3d0',
-  residual: '#d8b4fe',
-  head: '#86efac',
+  input: '#f5f5f5',
+  conv: '#90caf9',
+  pool: '#ffcc80',
+  norm: '#ce93d8',
+  dense: '#a5d6a7',
+  output: '#ef9a9a',
+  token: '#b3e5fc',
+  positional: '#ffccbc',
+  attention: '#f8bbd0',
+  ffn: '#c8e6c9',
+  residual: '#d1c4e9',
+  head: '#ffab91',
 };
 
 const presets = {
@@ -101,11 +101,11 @@ const layerTypeOptions = Object.keys(layerColors);
 let architectureState = structuredClone(presets.cnn.layers);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#060917');
-scene.fog = new THREE.Fog('#060917', 28, 52);
+scene.background = new THREE.Color('#f8fafc');
+scene.fog = new THREE.Fog('#f8fafc', 42, 74);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-camera.position.set(0, 4.2, 26);
+camera.position.set(0, 3.8, 32);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -114,24 +114,25 @@ viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.minDistance = 9;
-controls.maxDistance = 70;
-controls.target.set(0, 0, 0);
+controls.minDistance = 14;
+controls.maxDistance = 95;
+controls.enablePan = true;
+controls.target.set(0, 0.5, 0);
 
-const ambient = new THREE.AmbientLight('#dbeafe', 0.6);
+const ambient = new THREE.AmbientLight('#ffffff', 0.88);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight('#67e8f9', 0.95);
-keyLight.position.set(8, 10, 10);
+const keyLight = new THREE.DirectionalLight('#ffffff', 0.52);
+keyLight.position.set(8, 14, 18);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight('#f5d0fe', 0.8);
-rimLight.position.set(-10, 4, -10);
+const rimLight = new THREE.DirectionalLight('#f8fafc', 0.35);
+rimLight.position.set(-10, 6, -12);
 scene.add(rimLight);
 
-const grid = new THREE.GridHelper(80, 40, '#334155', '#1f2937');
-grid.position.y = -4.2;
-grid.material.opacity = 0.23;
+const grid = new THREE.GridHelper(120, 60, '#d4d4d8', '#e4e4e7');
+grid.position.y = -3.8;
+grid.material.opacity = 0.5;
 grid.material.transparent = true;
 scene.add(grid);
 
@@ -142,30 +143,28 @@ const connectionGroup = new THREE.Group();
 scene.add(connectionGroup);
 
 const guiState = {
-  explode: 1.2,
-  opacity: 0.9,
-  glow: 0.3,
-  rotate: true,
+  spacing: 2.4,
+  opacity: 0.2,
+  depthScale: 0.85,
+  rotate: false,
 };
 
-const gui = new GUI({ title: 'Visual Controls' });
-gui.add(guiState, 'explode', 0.7, 2.0, 0.01).name('Layer Spacing');
-gui.add(guiState, 'opacity', 0.25, 1, 0.01).name('Layer Opacity');
-gui.add(guiState, 'glow', 0, 1.2, 0.01).name('Emissive Glow');
+const gui = new GUI({ title: 'Schematic Controls' });
+gui.add(guiState, 'spacing', 1.5, 4.5, 0.05).name('Layer Spacing');
+gui.add(guiState, 'opacity', 0.05, 0.55, 0.01).name('Tensor Opacity');
+gui.add(guiState, 'depthScale', 0.4, 1.4, 0.05).name('Depth Scale');
 gui.add(guiState, 'rotate').name('Auto Orbit');
+gui.close();
 
 function makeTextSprite(labelText) {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 640;
+  canvas.height = 86;
   const context = canvas.getContext('2d');
-  context.fillStyle = 'rgba(7, 10, 22, 0.8)';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = 'rgba(99, 102, 241, 0.8)';
-  context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
-  context.font = '700 38px Segoe UI';
-  context.fillStyle = '#e2e8f0';
-  context.fillText(labelText, 20, 74);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.font = '500 34px Segoe UI';
+  context.fillStyle = '#27272a';
+  context.fillText(labelText, 12, 55);
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({
@@ -174,7 +173,7 @@ function makeTextSprite(labelText) {
     depthWrite: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(5.5, 1.4, 1);
+  sprite.scale.set(7, 0.95, 1);
   return sprite;
 }
 
@@ -206,58 +205,78 @@ function updateLegend(layers) {
   });
 }
 
+function addArrow(start, end) {
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = direction.length();
+  if (length < 0.05) return;
+  direction.normalize();
+
+  const shaftLength = Math.max(0.2, length - 0.28);
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.028, 0.028, shaftLength, 8),
+    new THREE.MeshBasicMaterial({ color: '#3f3f46' }),
+  );
+  shaft.position.copy(start).addScaledVector(direction, shaftLength / 2);
+  shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  connectionGroup.add(shaft);
+
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(0.08, 0.22, 8),
+    new THREE.MeshBasicMaterial({ color: '#18181b' }),
+  );
+  head.position.copy(start).addScaledVector(direction, shaftLength + 0.11);
+  head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  connectionGroup.add(head);
+}
+
 function buildArchitecture(layers) {
   updateLegend(layers);
   clearGroup(layerGroup);
   clearGroup(connectionGroup);
 
-  const startX = -((layers.length - 1) * guiState.explode) / 2;
+  const startX = -((layers.length - 1) * guiState.spacing) / 2;
   const points = [];
+  const baseY = 0.1;
 
   layers.forEach((layer, index) => {
-    const geometry = new THREE.BoxGeometry(layer.w, layer.h, layer.d);
+    const geometry = new THREE.BoxGeometry(layer.w, layer.h, layer.d * guiState.depthScale);
     const material = new THREE.MeshStandardMaterial({
       color: layerColors[layer.type] || '#94a3b8',
       transparent: true,
       opacity: guiState.opacity,
-      roughness: 0.4,
-      metalness: 0.15,
-      emissive: layerColors[layer.type] || '#94a3b8',
-      emissiveIntensity: guiState.glow,
+      roughness: 1,
+      metalness: 0,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.x = startX + index * guiState.explode;
-    mesh.position.y = (Math.sin(index * 0.5) * 0.5) - 0.15;
-    mesh.rotation.y = index * 0.08;
+    mesh.position.x = startX + index * guiState.spacing;
+    mesh.position.y = baseY;
+    mesh.rotation.y = -0.2;
     layerGroup.add(mesh);
 
     const edge = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: '#e2e8f0', transparent: true, opacity: 0.45 }),
+      new THREE.LineBasicMaterial({ color: '#111827', transparent: true, opacity: 0.7 }),
     );
     mesh.add(edge);
 
     const label = makeTextSprite(layer.name);
-    label.position.set(0, layer.h / 2 + 1.2, 0);
+    label.position.set(0, layer.h / 2 + 0.85, 0);
     mesh.add(label);
 
-    points.push(mesh.position.clone());
+    points.push({
+      in: new THREE.Vector3(mesh.position.x - layer.w / 2, baseY, 0),
+      out: new THREE.Vector3(mesh.position.x + layer.w / 2, baseY, 0),
+    });
   });
 
-  const curve = new THREE.CatmullRomCurve3(points);
-  const tubeGeometry = new THREE.TubeGeometry(curve, 200, 0.06, 8, false);
-  const tubeMaterial = new THREE.MeshBasicMaterial({
-    color: '#93c5fd',
-    transparent: true,
-    opacity: 0.55,
-  });
-  const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
-  connectionGroup.add(tube);
+  for (let index = 0; index < points.length - 1; index += 1) {
+    addArrow(points[index].out, points[index + 1].in);
+  }
 
-  camera.position.z = Math.max(20, 14 + layers.length * 1.2);
-  camera.position.y = 4.2;
-  controls.target.set(0, 0, 0);
+  camera.position.z = Math.max(30, 16 + layers.length * 1.4);
+  camera.position.y = 3.5;
+  controls.target.set(0, 0.2, 0);
 }
 
 function rerenderScene() {
@@ -447,8 +466,8 @@ let spin = 0;
 function animate() {
   requestAnimationFrame(animate);
   if (guiState.rotate) {
-    spin += 0.0028;
-    const radius = camera.position.length();
+    spin += 0.0024;
+    const radius = Math.max(30, 16 + architectureState.length * 1.4);
     camera.position.x = Math.sin(spin) * radius * 0.18;
     camera.position.z = Math.cos(spin) * radius;
   }
