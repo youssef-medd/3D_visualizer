@@ -466,7 +466,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.05;
 viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -479,26 +479,29 @@ controls.target.set(0, 0.3, 0);
 // Post-processing bloom
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(512, 512), 1.35, 0.55, 0.07);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.38, 0.24);
 composer.addPass(bloomPass);
 
-const ambient = new THREE.AmbientLight('#080d22', 0.22);
+const ambient = new THREE.AmbientLight('#ffffff', 0.32);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight('#c7d2fe', 1.4);
-keyLight.position.set(12, 14, 22);
+const hemiLight = new THREE.HemisphereLight('#f8fafc', '#111827', 0.42);
+scene.add(hemiLight);
+
+const keyLight = new THREE.DirectionalLight('#fff7ed', 1.35);
+keyLight.position.set(13, 15, 20);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight('#a855f7', 1.1);
+const rimLight = new THREE.DirectionalLight('#f1f5f9', 0.72);
 rimLight.position.set(-14, 8, -14);
 scene.add(rimLight);
 
-const fillLight = new THREE.PointLight('#22d3ee', 2.2, 90);
-fillLight.position.set(0, 8, 8);
+const fillLight = new THREE.PointLight('#ffffff', 1.25, 80);
+fillLight.position.set(0, 7, 9);
 scene.add(fillLight);
 
-const accentLight = new THREE.PointLight('#ec4899', 0.9, 80);
-accentLight.position.set(14, -4, -8);
+const accentLight = new THREE.PointLight('#ffe4c7', 0.5, 70);
+accentLight.position.set(12, -3, -7);
 scene.add(accentLight);
 
 const floorGlow = new THREE.Mesh(
@@ -646,31 +649,20 @@ function createStylizedLayerMesh(layer, color) {
 
   // ── Core: glass physical material ────────────────────────────
   const coreGeometry = new THREE.BoxGeometry(layer.w, layer.h, depth);
-<<<<<<< HEAD
   const coreMaterial = new THREE.MeshPhysicalMaterial({
-    color:              col3,
-    transparent:        true,
-    opacity:            Math.max(guiState.opacity * 0.85, 0.38),
-    roughness:          0.04,
-    metalness:          0.08,
-    clearcoat:          1.0,
-    clearcoatRoughness: 0.05,
-    transmission:       0.22,
-    thickness:          depth,
-    ior:                1.45,
-    emissive:           col3,
-    emissiveIntensity:  0.32,
-=======
-  const coreMaterial = new THREE.MeshStandardMaterial({
-    color,
+    color: col3,
     transparent: true,
-    opacity: guiState.opacity,
-    roughness: 0.18,
-    metalness: 0.28,
-    emissive: color,
-    emissiveIntensity: 0.24,
+    opacity: Math.max(guiState.opacity * 0.85, 0.38),
+    roughness: 0.04,
+    metalness: 0.08,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    transmission: 0.22,
+    thickness: depth,
+    ior: 1.45,
+    emissive: col3,
+    emissiveIntensity: 0.12,
     wireframe: guiState.wireframe,
->>>>>>> 96dca6e14135f01d6b0a9e925723f15dc24a26d5
   });
   const core = new THREE.Mesh(coreGeometry, coreMaterial);
   group.add(core);
@@ -1294,7 +1286,7 @@ function animate() {
     mesh.position.y = mesh.userData.baseY + wobble;
     if (mesh.userData.coreMaterial) {
       mesh.userData.coreMaterial.emissiveIntensity =
-        0.15 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.1;
+        0.06 + (Math.sin(pulseClock * 1.2 + mesh.userData.index) + 1) * 0.03;
     }
   });
 
