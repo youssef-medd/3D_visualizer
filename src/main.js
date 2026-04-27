@@ -72,6 +72,9 @@ app.innerHTML = `
         <div class="panel-card">
           <h2>Architecture Diagnostics</h2>
           <p id="shape-summary">No architecture analyzed yet.</p>
+          <div class="inline-actions">
+            <button id="download-report" class="btn">Download Report</button>
+          </div>
           <ul id="diagnostics-list"></ul>
         </div>
         <div class="panel-card legend">
@@ -105,6 +108,7 @@ const rotateControl = document.querySelector('#rotate-control');
 const diagnosticsList = document.querySelector('#diagnostics-list');
 const shapeSummary = document.querySelector('#shape-summary');
 const validationState = document.querySelector('#validation-state');
+const downloadReportBtn = document.querySelector('#download-report');
 
 const layerColors = {
   input: '#93c5fd',
@@ -159,6 +163,7 @@ const layerTypeOptions = Object.keys(layerColors);
 let architectureState = structuredClone(presets.cnn.layers);
 let architectureMode = 'cnn';
 let lastShapeInfo = [];
+let lastValidationResult = { messages: [], shapes: [], status: 'valid' };
 
 function defaultParamsForType(type) {
   const defaults = {
@@ -186,11 +191,20 @@ function validateArchitecture(layers, mode) {
   const messages = [];
   const shapes = [];
   let state = null;
+  const cnnTypes = new Set(['input', 'conv', 'pool', 'norm', 'dense', 'output']);
+  const transformerTypes = new Set(['token', 'positional', 'norm', 'attention', 'ffn', 'residual', 'head', 'output']);
 
   for (let index = 0; index < layers.length; index += 1) {
     const layer = layers[index];
     const params = layer.params || {};
     let descriptor = 'unknown';
+    const allowed = mode === 'cnn' ? cnnTypes : transformerTypes;
+
+    if (!allowed.has(layer.type)) {
+      messages.push(
+        `Layer ${index + 1} (${layer.name}) uses type "${layer.type}" which is incompatible with ${mode.toUpperCase()} mode.`,
+      );
+    }
 
     if (mode === 'cnn') {
       if (layer.type === 'input') {
@@ -505,6 +519,7 @@ function rerenderScene() {
     return;
   }
   const validation = validateArchitecture(architectureState, architectureMode);
+  lastValidationResult = validation;
   lastShapeInfo = validation.shapes;
   updateDiagnostics(validation);
   buildArchitecture(architectureState);
@@ -846,6 +861,26 @@ autoFixBtn.addEventListener('click', () => {
 
 shapeLayoutBtn.addEventListener('click', () => {
   applyShapeLayout();
+});
+
+downloadReportBtn.addEventListener('click', () => {
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    mode: architectureMode,
+    status: lastValidationResult.status,
+    issues: lastValidationResult.messages,
+    derivedShapes: lastValidationResult.shapes,
+    layers: architectureState,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `architecture-report-${architectureMode}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 
 function syncControlsToScene() {
