@@ -445,6 +445,63 @@ function addArrow(start, end) {
   connectionGroup.add(head);
 }
 
+function createStylizedLayerMesh(layer, color) {
+  const group = new THREE.Group();
+  const depth = layer.d * guiState.depthScale;
+
+  // Main tensor volume
+  const coreGeometry = new THREE.BoxGeometry(layer.w, layer.h, depth);
+  const coreMaterial = new THREE.MeshStandardMaterial({
+    color,
+    transparent: true,
+    opacity: guiState.opacity,
+    roughness: 0.18,
+    metalness: 0.28,
+    emissive: color,
+    emissiveIntensity: 0.24,
+  });
+  const core = new THREE.Mesh(coreGeometry, coreMaterial);
+  group.add(core);
+
+  // Subtle internal tensor slices to avoid "flat AI-generated box" feel.
+  const sliceCount = Math.min(7, Math.max(3, Math.round(depth * 6)));
+  for (let idx = 1; idx < sliceCount; idx += 1) {
+    const z = -depth / 2 + (idx / sliceCount) * depth;
+    const slice = new THREE.Mesh(
+      new THREE.PlaneGeometry(layer.w * 0.98, layer.h * 0.98),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.05 + (idx / sliceCount) * 0.06,
+        side: THREE.DoubleSide,
+      }),
+    );
+    slice.position.z = z;
+    core.add(slice);
+  }
+
+  // Outer aura shell
+  const aura = new THREE.Mesh(
+    new THREE.BoxGeometry(layer.w * 1.03, layer.h * 1.03, depth * 1.15),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.1,
+      side: THREE.BackSide,
+    }),
+  );
+  group.add(aura);
+
+  // Crisp frame
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(coreGeometry),
+    new THREE.LineBasicMaterial({ color: '#dbeafe', transparent: true, opacity: 0.72 }),
+  );
+  core.add(edges);
+
+  return { group, core };
+}
+
 function buildArchitecture(layers) {
   updateLegend(layers);
   clearGroup(layerGroup);
@@ -455,51 +512,26 @@ function buildArchitecture(layers) {
   const baseY = 0.1;
 
   layers.forEach((layer, index) => {
-    const geometry = new THREE.BoxGeometry(layer.w, layer.h, layer.d * guiState.depthScale);
     const color = layerColors[layer.type] || '#94a3b8';
-    const material = new THREE.MeshStandardMaterial({
-      color,
-      transparent: true,
-      opacity: guiState.opacity,
-      roughness: 0.24,
-      metalness: 0.2,
-      emissive: color,
-      emissiveIntensity: 0.24,
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.x = startX + index * guiState.spacing;
-    mesh.position.y = baseY + Math.sin(index * 0.6) * 0.15 * guiState.wave;
-    mesh.rotation.y = -0.32;
-    mesh.userData.baseY = mesh.position.y;
-    mesh.userData.index = index;
-    layerGroup.add(mesh);
-
-    const aura = new THREE.Mesh(
-      new THREE.BoxGeometry(layer.w * 1.03, layer.h * 1.03, layer.d * guiState.depthScale * 1.12),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.09,
-        side: THREE.BackSide,
-      }),
-    );
-    mesh.add(aura);
-
-    const edge = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: '#dbeafe', transparent: true, opacity: 0.62 }),
-    );
-    mesh.add(edge);
+    const { group, core } = createStylizedLayerMesh(layer, color);
+    group.position.x = startX + index * guiState.spacing;
+    group.position.y = baseY + Math.sin(index * 0.6) * 0.15 * guiState.wave;
+    group.rotation.y = -0.32;
+    group.userData.baseY = group.position.y;
+    group.userData.index = index;
+    layerGroup.add(group);
 
     const label = makeTextSprite(layer.name);
     label.position.set(0, layer.h / 2 + 0.85, 0);
-    mesh.add(label);
+    group.add(label);
 
     points.push({
-      in: new THREE.Vector3(mesh.position.x - layer.w / 2, mesh.position.y, 0),
-      out: new THREE.Vector3(mesh.position.x + layer.w / 2, mesh.position.y, 0),
+      in: new THREE.Vector3(group.position.x - layer.w / 2, group.position.y, 0),
+      out: new THREE.Vector3(group.position.x + layer.w / 2, group.position.y, 0),
     });
+
+    // Keep direct access to emissive material for animation updates.
+    group.userData.coreMaterial = core.material;
   });
 
   for (let index = 0; index < points.length - 1; index += 1) {
@@ -928,11 +960,12 @@ function animate() {
   rimLight.intensity = 0.86 + Math.sin(pulseClock * 0.8) * 0.12;
 
   layerGroup.children.forEach((mesh) => {
-    if (!(mesh instanceof THREE.Mesh)) return;
     const wobble = Math.sin(pulseClock + mesh.userData.index * 0.8) * 0.07 * guiState.wave;
     mesh.position.y = mesh.userData.baseY + wobble;
-    mesh.material.emissiveIntensity =
-      0.15 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.1;
+    if (mesh.userData.coreMaterial) {
+      mesh.userData.coreMaterial.emissiveIntensity =
+        0.15 + (Math.sin(pulseClock * 1.3 + mesh.userData.index) + 1) * 0.1;
+    }
   });
 
   connectionGroup.children.forEach((part, index) => {
