@@ -8,6 +8,24 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 const app = document.querySelector('#app');
 
 app.innerHTML = `
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-mark">NF</div>
+      <div class="logo-name">Neural<span>Forge</span> 3D</div>
+    </div>
+    <div class="topbar-status">
+      <div class="status-chip">
+        <span class="status-dot" id="val-dot"></span>
+        <span id="val-text">Pending</span>
+      </div>
+      <div class="status-chip" id="layer-count-chip">0 layers</div>
+      <div class="status-chip" id="mode-chip">CNN</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="preset-btn active" id="btn-cnn">CNN</button>
+      <button class="preset-btn" id="btn-transformer">Transformer</button>
+    </div>
+  </div>
   <div class="layout">
     <header class="header">
       <div class="header-content">
@@ -26,7 +44,7 @@ app.innerHTML = `
         </div>
       </div>
     </header>
-    <main class="workspace">
+    <main class="workspace workspace-3col">
       <aside class="panel">
         <div class="panel-card">
           <h2>Architecture</h2>
@@ -49,22 +67,35 @@ app.innerHTML = `
           <div class="control-list">
             <label class="control-row">Layer Spacing
               <input id="spacing-control" type="range" min="1.5" max="4.8" step="0.05" value="2.6" />
+              <span id="spacing-value">2.60</span>
             </label>
             <label class="control-row">Tensor Opacity
               <input id="opacity-control" type="range" min="0.14" max="0.95" step="0.01" value="0.62" />
+              <span id="opacity-value">0.62</span>
             </label>
             <label class="control-row">Depth Scale
               <input id="depth-control" type="range" min="0.4" max="1.7" step="0.05" value="1" />
+              <span id="depth-value">1.00</span>
             </label>
             <label class="control-row">Flow Wave
               <input id="wave-control" type="range" min="0" max="2" step="0.01" value="0.9" />
+              <span id="wave-value">0.90</span>
             </label>
             <label class="control-row">Pulse Speed
               <input id="pulse-control" type="range" min="0.2" max="2.4" step="0.01" value="1.1" />
+              <span id="pulse-value">1.10</span>
             </label>
             <label class="toggle-row">
               <input id="rotate-control" type="checkbox" />
               Auto Orbit
+            </label>
+            <label class="toggle-row">
+              <input id="wireframe-control" type="checkbox" />
+              Wireframe Blocks
+            </label>
+            <label class="toggle-row">
+              <input id="ghost-control" type="checkbox" checked />
+              Ghost Connections
             </label>
           </div>
         </div>
@@ -87,13 +118,34 @@ app.innerHTML = `
       </aside>
       <section class="viewport-wrap">
         <div id="viewport"></div>
+        <div class="hud-bar">
+          <span id="hud-mode">CNN</span>
+          <span class="hud-sep"></span>
+          <span id="hud-layers">0 layers</span>
+          <span class="hud-sep"></span>
+          <span id="hud-params">~0 params</span>
+          <span class="hud-sep"></span>
+          <span>Drag to orbit · Scroll to zoom</span>
+        </div>
       </section>
+      <aside class="panel right-panel">
+        <div class="panel-card">
+          <h2>Selected Layer</h2>
+          <div id="layer-detail" class="layer-detail-empty">Select a layer card to inspect details.</div>
+        </div>
+        <div class="panel-card">
+          <h2>ML Insights</h2>
+          <div id="insights-body"></div>
+        </div>
+      </aside>
     </main>
   </div>
 `;
 
 const loadCnnBtn = document.querySelector('#load-cnn');
 const loadTransformerBtn = document.querySelector('#load-transformer');
+const presetCnnBtn = document.querySelector('#btn-cnn');
+const presetTransformerBtn = document.querySelector('#btn-transformer');
 const addLayerBtn = document.querySelector('#add-layer');
 const clearLayersBtn = document.querySelector('#clear-layers');
 const autoFixBtn = document.querySelector('#auto-fix');
@@ -108,10 +160,26 @@ const depthControl = document.querySelector('#depth-control');
 const waveControl = document.querySelector('#wave-control');
 const pulseControl = document.querySelector('#pulse-control');
 const rotateControl = document.querySelector('#rotate-control');
+const wireframeControl = document.querySelector('#wireframe-control');
+const ghostControl = document.querySelector('#ghost-control');
+const spacingValue = document.querySelector('#spacing-value');
+const opacityValue = document.querySelector('#opacity-value');
+const depthValue = document.querySelector('#depth-value');
+const waveValue = document.querySelector('#wave-value');
+const pulseValue = document.querySelector('#pulse-value');
 const diagnosticsList = document.querySelector('#diagnostics-list');
 const shapeSummary = document.querySelector('#shape-summary');
 const validationState = document.querySelector('#validation-state');
 const downloadReportBtn = document.querySelector('#download-report');
+const valDot = document.querySelector('#val-dot');
+const valText = document.querySelector('#val-text');
+const layerCountChip = document.querySelector('#layer-count-chip');
+const modeChip = document.querySelector('#mode-chip');
+const insightsBody = document.querySelector('#insights-body');
+const layerDetail = document.querySelector('#layer-detail');
+const hudMode = document.querySelector('#hud-mode');
+const hudLayers = document.querySelector('#hud-layers');
+const hudParams = document.querySelector('#hud-params');
 
 const layerColors = {
   input: '#93c5fd',
@@ -167,6 +235,15 @@ let architectureState = structuredClone(presets.cnn.layers);
 let architectureMode = 'cnn';
 let lastShapeInfo = [];
 let lastValidationResult = { messages: [], shapes: [], status: 'valid' };
+let selectedLayerIndex = -1;
+
+const insightNotes = [
+  'Convolution depth should generally increase as spatial dimensions shrink.',
+  'Attention head count must divide dModel for valid projection splits.',
+  'Residual connections are safest when tensor shapes match exactly.',
+  'Early aggressive pooling can collapse details and hurt accuracy.',
+  'For classification heads, dense/output width should reflect target classes.',
+];
 
 function defaultParamsForType(type) {
   const defaults = {
@@ -305,6 +382,79 @@ function updateDiagnostics(result) {
   });
 }
 
+function updateTopbarStatus() {
+  const issueCount = lastValidationResult.messages.length;
+  const valid = issueCount === 0;
+  valText.textContent = valid ? 'Valid' : `${issueCount} issue${issueCount > 1 ? 's' : ''}`;
+  valDot.className = `status-dot${valid ? '' : ' err'}`;
+  layerCountChip.textContent = `${architectureState.length} layers`;
+  modeChip.textContent = architectureMode === 'cnn' ? 'CNN' : 'Transformer';
+  presetCnnBtn.classList.toggle('active', architectureMode === 'cnn');
+  presetTransformerBtn.classList.toggle('active', architectureMode === 'transformer');
+}
+
+function estimateParams() {
+  let total = 0;
+  let currentChannels = 3;
+  architectureState.forEach((layer) => {
+    const p = layer.params || {};
+    if (layer.type === 'input') currentChannels = Number(p.c || 3);
+    if (layer.type === 'conv') {
+      const k = Number(p.k || 3);
+      const filters = Number(p.filters || 64);
+      total += k * k * currentChannels * filters + filters;
+      currentChannels = filters;
+    }
+    if (layer.type === 'dense') total += currentChannels * Number(p.units || 512);
+    if (layer.type === 'attention') {
+      const dModel = Number(p.dModel || 512);
+      total += 4 * dModel * dModel;
+    }
+    if (layer.type === 'ffn') {
+      const hidden = Number(p.hidden || 2048);
+      const dModel = Number(p.dModel || 512);
+      total += dModel * hidden + hidden * dModel;
+    }
+  });
+  if (total > 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
+  if (total > 1_000) return `${(total / 1_000).toFixed(1)}K`;
+  return String(total);
+}
+
+function updateHudBar() {
+  hudMode.textContent = architectureMode === 'cnn' ? 'CNN' : 'Transformer';
+  hudLayers.textContent = `${architectureState.length} layers`;
+  hudParams.textContent = `~${estimateParams()} params`;
+}
+
+function renderInsights() {
+  insightsBody.innerHTML = '';
+  const rotated = [...insightNotes].slice(0, 3 + (architectureState.length % 3));
+  rotated.forEach((text) => {
+    const card = document.createElement('div');
+    card.className = 'insight-card';
+    card.textContent = text;
+    insightsBody.appendChild(card);
+  });
+}
+
+function renderLayerDetail() {
+  if (selectedLayerIndex < 0 || selectedLayerIndex >= architectureState.length) {
+    layerDetail.className = 'layer-detail-empty';
+    layerDetail.textContent = 'Select a layer card to inspect details.';
+    return;
+  }
+  const layer = architectureState[selectedLayerIndex];
+  const derived = lastShapeInfo[selectedLayerIndex]?.descriptor || 'n/a';
+  layerDetail.className = 'layer-detail-card';
+  layerDetail.innerHTML = `
+    <p><strong>${layer.name}</strong></p>
+    <p>Type: ${layer.type}</p>
+    <p>Visual: ${layer.w.toFixed(2)} x ${layer.h.toFixed(2)} x ${layer.d.toFixed(2)}</p>
+    <p>Derived: ${derived}</p>
+  `;
+}
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#050713');
 scene.fog = new THREE.Fog('#050713', 34, 96);
@@ -383,6 +533,8 @@ const guiState = {
   wave: 0.9,
   pulseSpeed: 1.1,
   rotate: false,
+  wireframe: false,
+  ghost: true,
 };
 
 function makeTextSprite(labelText) {
@@ -437,6 +589,7 @@ function updateLegend(layers) {
 }
 
 function addArrow(start, end) {
+  if (!guiState.ghost) return;
   const direction = new THREE.Vector3().subVectors(end, start);
   const length = direction.length();
   if (length < 0.05) return;
@@ -493,6 +646,7 @@ function createStylizedLayerMesh(layer, color) {
 
   // ── Core: glass physical material ────────────────────────────
   const coreGeometry = new THREE.BoxGeometry(layer.w, layer.h, depth);
+<<<<<<< HEAD
   const coreMaterial = new THREE.MeshPhysicalMaterial({
     color:              col3,
     transparent:        true,
@@ -506,6 +660,17 @@ function createStylizedLayerMesh(layer, color) {
     ior:                1.45,
     emissive:           col3,
     emissiveIntensity:  0.32,
+=======
+  const coreMaterial = new THREE.MeshStandardMaterial({
+    color,
+    transparent: true,
+    opacity: guiState.opacity,
+    roughness: 0.18,
+    metalness: 0.28,
+    emissive: color,
+    emissiveIntensity: 0.24,
+    wireframe: guiState.wireframe,
+>>>>>>> 96dca6e14135f01d6b0a9e925723f15dc24a26d5
   });
   const core = new THREE.Mesh(coreGeometry, coreMaterial);
   group.add(core);
@@ -679,6 +844,10 @@ function rerenderScene() {
   lastValidationResult = validation;
   lastShapeInfo = validation.shapes;
   updateDiagnostics(validation);
+  updateTopbarStatus();
+  updateHudBar();
+  renderInsights();
+  renderLayerDetail();
   buildArchitecture(architectureState);
 }
 
@@ -710,7 +879,12 @@ function renderLayerEditor() {
 
   architectureState.forEach((layer, index) => {
     const card = document.createElement('div');
-    card.className = 'layer-card';
+    card.className = `layer-card ${index === selectedLayerIndex ? 'selected-layer' : ''}`;
+    card.addEventListener('click', () => {
+      selectedLayerIndex = index;
+      renderLayerEditor();
+      renderLayerDetail();
+    });
 
     const topRow = document.createElement('div');
     topRow.className = 'layer-top';
@@ -973,6 +1147,7 @@ function autoFixArchitecture() {
 function loadPreset(presetName) {
   architectureState = structuredClone(presets[presetName].layers);
   architectureMode = presets[presetName].mode;
+  selectedLayerIndex = -1;
   presetDescription.textContent = presets[presetName].description;
   renderLayerEditor();
   rerenderScene();
@@ -994,6 +1169,14 @@ loadTransformerBtn.addEventListener('click', () => {
   loadPreset('transformer');
 });
 
+presetCnnBtn.addEventListener('click', () => {
+  loadPreset('cnn');
+});
+
+presetTransformerBtn.addEventListener('click', () => {
+  loadPreset('transformer');
+});
+
 addLayerBtn.addEventListener('click', () => {
   architectureState.push({
     name: `Layer ${architectureState.length + 1}`,
@@ -1003,12 +1186,14 @@ addLayerBtn.addEventListener('click', () => {
     d: 0.8,
     params: defaultParamsForType(architectureMode === 'cnn' ? 'conv' : 'attention'),
   });
+  selectedLayerIndex = architectureState.length - 1;
   renderLayerEditor();
   rerenderScene();
 });
 
 clearLayersBtn.addEventListener('click', () => {
   architectureState = [];
+  selectedLayerIndex = -1;
   renderLayerEditor();
   rerenderScene();
 });
@@ -1048,6 +1233,13 @@ function syncControlsToScene() {
   guiState.wave = Number(waveControl.value);
   guiState.pulseSpeed = Number(pulseControl.value);
   guiState.rotate = rotateControl.checked;
+  guiState.wireframe = wireframeControl.checked;
+  guiState.ghost = ghostControl.checked;
+  spacingValue.textContent = guiState.spacing.toFixed(2);
+  opacityValue.textContent = guiState.opacity.toFixed(2);
+  depthValue.textContent = guiState.depthScale.toFixed(2);
+  waveValue.textContent = guiState.wave.toFixed(2);
+  pulseValue.textContent = guiState.pulseSpeed.toFixed(2);
   rerenderScene();
 }
 
@@ -1058,6 +1250,8 @@ function syncControlsToScene() {
   waveControl,
   pulseControl,
   rotateControl,
+  wireframeControl,
+  ghostControl,
 ].forEach((control) => {
   control.addEventListener('input', syncControlsToScene);
   control.addEventListener('change', syncControlsToScene);
