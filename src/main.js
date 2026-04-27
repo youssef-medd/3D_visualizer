@@ -35,6 +35,10 @@ app.innerHTML = `
             <button id="add-layer" class="btn btn-primary">Add Layer</button>
             <button id="clear-layers" class="btn btn-danger">Clear</button>
           </div>
+          <div class="inline-actions">
+            <button id="auto-fix" class="btn">Auto Fix</button>
+            <button id="shape-layout" class="btn">Shape Layout</button>
+          </div>
           <p id="preset-desc">Pick a preset then refine each layer manually.</p>
         </div>
         <div class="panel-card">
@@ -86,6 +90,8 @@ const loadCnnBtn = document.querySelector('#load-cnn');
 const loadTransformerBtn = document.querySelector('#load-transformer');
 const addLayerBtn = document.querySelector('#add-layer');
 const clearLayersBtn = document.querySelector('#clear-layers');
+const autoFixBtn = document.querySelector('#auto-fix');
+const shapeLayoutBtn = document.querySelector('#shape-layout');
 const presetDescription = document.querySelector('#preset-desc');
 const legendList = document.querySelector('#legend-list');
 const layerEditor = document.querySelector('#layer-editor');
@@ -676,6 +682,122 @@ function renderLayerEditor() {
   });
 }
 
+function shapeToVisual(shape, mode) {
+  if (!shape) return { w: 3, h: 3, d: 1 };
+  if (mode === 'cnn') {
+    const match = shape.match(/^(\d+)x(\d+)x(\d+)$/);
+    if (match) {
+      const [, h, w, c] = match.map(Number);
+      return {
+        w: Math.max(1.2, Math.log2(w + 1) * 0.75),
+        h: Math.max(1.2, Math.log2(h + 1) * 0.75),
+        d: Math.max(0.3, Math.log2(c + 1) * 0.15),
+      };
+    }
+  } else {
+    const match = shape.match(/^(\d+)x(\d+)/);
+    if (match) {
+      const [, seq, dModel] = match.map(Number);
+      return {
+        w: Math.max(2.0, Math.log2(seq + 1) * 0.9),
+        h: Math.max(1.3, Math.log2(dModel + 1) * 0.45),
+        d: Math.max(0.4, Math.log2(dModel + 1) * 0.22),
+      };
+    }
+  }
+  return { w: 3, h: 3, d: 1 };
+}
+
+function applyShapeLayout() {
+  const result = validateArchitecture(architectureState, architectureMode);
+  architectureState = architectureState.map((layer, index) => {
+    const visual = shapeToVisual(result.shapes[index]?.descriptor, architectureMode);
+    return {
+      ...layer,
+      w: Number(visual.w.toFixed(2)),
+      h: Number(visual.h.toFixed(2)),
+      d: Number(visual.d.toFixed(2)),
+    };
+  });
+  renderLayerEditor();
+  rerenderScene();
+}
+
+function autoFixArchitecture() {
+  architectureState = architectureState.map((layer, index) => {
+    const params = { ...defaultParamsForType(layer.type), ...(layer.params || {}) };
+
+    if (architectureMode === 'cnn') {
+      if (layer.type === 'conv' || layer.type === 'pool') {
+        params.k = Math.max(1, Math.round(Number(params.k || 3)));
+        params.s = Math.max(1, Math.round(Number(params.s || 1)));
+        params.p = Math.max(0, Math.round(Number(params.p || 0)));
+      }
+      if (layer.type === 'conv') params.filters = Math.max(1, Math.round(Number(params.filters || 64)));
+      if (layer.type === 'dense') params.units = Math.max(1, Math.round(Number(params.units || 512)));
+      if (layer.type === 'output') params.classes = Math.max(1, Math.round(Number(params.classes || 10)));
+      if (layer.type === 'input') {
+        params.h = Math.max(1, Math.round(Number(params.h || 224)));
+        params.w = Math.max(1, Math.round(Number(params.w || 224)));
+        params.c = Math.max(1, Math.round(Number(params.c || 3)));
+      }
+    } else {
+      if (layer.type === 'token') {
+        params.seq = Math.max(1, Math.round(Number(params.seq || 128)));
+        params.dModel = Math.max(8, Math.round(Number(params.dModel || 512)));
+      }
+      if (layer.type === 'attention') {
+        params.heads = Math.max(1, Math.round(Number(params.heads || 8)));
+      }
+      if (layer.type === 'ffn') {
+        params.hidden = Math.max(4, Math.round(Number(params.hidden || 2048)));
+      }
+      if (layer.type === 'head' || layer.type === 'output') {
+        params.classes = Math.max(1, Math.round(Number(params.classes || 10)));
+      }
+    }
+
+    return { ...layer, params };
+  });
+
+  if (architectureMode === 'cnn' && architectureState[0]?.type !== 'input') {
+    architectureState.unshift({
+      name: 'Input Layer',
+      type: 'input',
+      w: 6,
+      h: 6,
+      d: 0.6,
+      params: defaultParamsForType('input'),
+    });
+  }
+  if (architectureMode === 'transformer' && architectureState[0]?.type !== 'token') {
+    architectureState.unshift({
+      name: 'Token Embedding',
+      type: 'token',
+      w: 6,
+      h: 2,
+      d: 1,
+      params: defaultParamsForType('token'),
+    });
+  }
+
+  // Ensure attention heads divide model width when possible.
+  if (architectureMode === 'transformer') {
+    let dModel = 512;
+    architectureState.forEach((layer) => {
+      if (layer.type === 'token') dModel = Number(layer.params?.dModel || dModel);
+      if (layer.type === 'attention') {
+        let heads = Number(layer.params?.heads || 8);
+        while (heads > 1 && dModel % heads !== 0) heads -= 1;
+        layer.params.heads = heads;
+      }
+    });
+  }
+
+  renderLayerEditor();
+  rerenderScene();
+}
+
 function loadPreset(presetName) {
   architectureState = structuredClone(presets[presetName].layers);
   architectureMode = presets[presetName].mode;
@@ -716,6 +838,14 @@ clearLayersBtn.addEventListener('click', () => {
   architectureState = [];
   renderLayerEditor();
   rerenderScene();
+});
+
+autoFixBtn.addEventListener('click', () => {
+  autoFixArchitecture();
+});
+
+shapeLayoutBtn.addEventListener('click', () => {
+  applyShapeLayout();
 });
 
 function syncControlsToScene() {
