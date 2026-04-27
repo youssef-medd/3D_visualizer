@@ -5,6 +5,24 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 const app = document.querySelector('#app');
 
 app.innerHTML = `
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-mark">NF</div>
+      <div class="logo-name">Neural<span>Forge</span> 3D</div>
+    </div>
+    <div class="topbar-status">
+      <div class="status-chip">
+        <span class="status-dot" id="val-dot"></span>
+        <span id="val-text">Pending</span>
+      </div>
+      <div class="status-chip" id="layer-count-chip">0 layers</div>
+      <div class="status-chip" id="mode-chip">CNN</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="preset-btn active" id="btn-cnn">CNN</button>
+      <button class="preset-btn" id="btn-transformer">Transformer</button>
+    </div>
+  </div>
   <div class="layout">
     <header class="header">
       <div class="header-content">
@@ -23,7 +41,7 @@ app.innerHTML = `
         </div>
       </div>
     </header>
-    <main class="workspace">
+    <main class="workspace workspace-3col">
       <aside class="panel">
         <div class="panel-card">
           <h2>Architecture</h2>
@@ -85,12 +103,24 @@ app.innerHTML = `
       <section class="viewport-wrap">
         <div id="viewport"></div>
       </section>
+      <aside class="panel right-panel">
+        <div class="panel-card">
+          <h2>Selected Layer</h2>
+          <div id="layer-detail" class="layer-detail-empty">Select a layer card to inspect details.</div>
+        </div>
+        <div class="panel-card">
+          <h2>ML Insights</h2>
+          <div id="insights-body"></div>
+        </div>
+      </aside>
     </main>
   </div>
 `;
 
 const loadCnnBtn = document.querySelector('#load-cnn');
 const loadTransformerBtn = document.querySelector('#load-transformer');
+const presetCnnBtn = document.querySelector('#btn-cnn');
+const presetTransformerBtn = document.querySelector('#btn-transformer');
 const addLayerBtn = document.querySelector('#add-layer');
 const clearLayersBtn = document.querySelector('#clear-layers');
 const autoFixBtn = document.querySelector('#auto-fix');
@@ -109,6 +139,12 @@ const diagnosticsList = document.querySelector('#diagnostics-list');
 const shapeSummary = document.querySelector('#shape-summary');
 const validationState = document.querySelector('#validation-state');
 const downloadReportBtn = document.querySelector('#download-report');
+const valDot = document.querySelector('#val-dot');
+const valText = document.querySelector('#val-text');
+const layerCountChip = document.querySelector('#layer-count-chip');
+const modeChip = document.querySelector('#mode-chip');
+const insightsBody = document.querySelector('#insights-body');
+const layerDetail = document.querySelector('#layer-detail');
 
 const layerColors = {
   input: '#93c5fd',
@@ -164,6 +200,15 @@ let architectureState = structuredClone(presets.cnn.layers);
 let architectureMode = 'cnn';
 let lastShapeInfo = [];
 let lastValidationResult = { messages: [], shapes: [], status: 'valid' };
+let selectedLayerIndex = -1;
+
+const insightNotes = [
+  'Convolution depth should generally increase as spatial dimensions shrink.',
+  'Attention head count must divide dModel for valid projection splits.',
+  'Residual connections are safest when tensor shapes match exactly.',
+  'Early aggressive pooling can collapse details and hurt accuracy.',
+  'For classification heads, dense/output width should reflect target classes.',
+];
 
 function defaultParamsForType(type) {
   const defaults = {
@@ -300,6 +345,45 @@ function updateDiagnostics(result) {
     li.className = 'diag-error';
     diagnosticsList.appendChild(li);
   });
+}
+
+function updateTopbarStatus() {
+  const issueCount = lastValidationResult.messages.length;
+  const valid = issueCount === 0;
+  valText.textContent = valid ? 'Valid' : `${issueCount} issue${issueCount > 1 ? 's' : ''}`;
+  valDot.className = `status-dot${valid ? '' : ' err'}`;
+  layerCountChip.textContent = `${architectureState.length} layers`;
+  modeChip.textContent = architectureMode === 'cnn' ? 'CNN' : 'Transformer';
+  presetCnnBtn.classList.toggle('active', architectureMode === 'cnn');
+  presetTransformerBtn.classList.toggle('active', architectureMode === 'transformer');
+}
+
+function renderInsights() {
+  insightsBody.innerHTML = '';
+  const rotated = [...insightNotes].slice(0, 3 + (architectureState.length % 3));
+  rotated.forEach((text) => {
+    const card = document.createElement('div');
+    card.className = 'insight-card';
+    card.textContent = text;
+    insightsBody.appendChild(card);
+  });
+}
+
+function renderLayerDetail() {
+  if (selectedLayerIndex < 0 || selectedLayerIndex >= architectureState.length) {
+    layerDetail.className = 'layer-detail-empty';
+    layerDetail.textContent = 'Select a layer card to inspect details.';
+    return;
+  }
+  const layer = architectureState[selectedLayerIndex];
+  const derived = lastShapeInfo[selectedLayerIndex]?.descriptor || 'n/a';
+  layerDetail.className = 'layer-detail-card';
+  layerDetail.innerHTML = `
+    <p><strong>${layer.name}</strong></p>
+    <p>Type: ${layer.type}</p>
+    <p>Visual: ${layer.w.toFixed(2)} x ${layer.h.toFixed(2)} x ${layer.d.toFixed(2)}</p>
+    <p>Derived: ${derived}</p>
+  `;
 }
 
 const scene = new THREE.Scene();
@@ -554,6 +638,9 @@ function rerenderScene() {
   lastValidationResult = validation;
   lastShapeInfo = validation.shapes;
   updateDiagnostics(validation);
+  updateTopbarStatus();
+  renderInsights();
+  renderLayerDetail();
   buildArchitecture(architectureState);
 }
 
@@ -585,7 +672,12 @@ function renderLayerEditor() {
 
   architectureState.forEach((layer, index) => {
     const card = document.createElement('div');
-    card.className = 'layer-card';
+    card.className = `layer-card ${index === selectedLayerIndex ? 'selected-layer' : ''}`;
+    card.addEventListener('click', () => {
+      selectedLayerIndex = index;
+      renderLayerEditor();
+      renderLayerDetail();
+    });
 
     const topRow = document.createElement('div');
     topRow.className = 'layer-top';
@@ -848,6 +940,7 @@ function autoFixArchitecture() {
 function loadPreset(presetName) {
   architectureState = structuredClone(presets[presetName].layers);
   architectureMode = presets[presetName].mode;
+  selectedLayerIndex = -1;
   presetDescription.textContent = presets[presetName].description;
   renderLayerEditor();
   rerenderScene();
@@ -868,6 +961,14 @@ loadTransformerBtn.addEventListener('click', () => {
   loadPreset('transformer');
 });
 
+presetCnnBtn.addEventListener('click', () => {
+  loadPreset('cnn');
+});
+
+presetTransformerBtn.addEventListener('click', () => {
+  loadPreset('transformer');
+});
+
 addLayerBtn.addEventListener('click', () => {
   architectureState.push({
     name: `Layer ${architectureState.length + 1}`,
@@ -877,12 +978,14 @@ addLayerBtn.addEventListener('click', () => {
     d: 0.8,
     params: defaultParamsForType(architectureMode === 'cnn' ? 'conv' : 'attention'),
   });
+  selectedLayerIndex = architectureState.length - 1;
   renderLayerEditor();
   rerenderScene();
 });
 
 clearLayersBtn.addEventListener('click', () => {
   architectureState = [];
+  selectedLayerIndex = -1;
   renderLayerEditor();
   rerenderScene();
 });
