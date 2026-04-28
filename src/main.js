@@ -105,186 +105,306 @@ const state = {
 };
 
 /* --------------------------------------------------------------------------
-   Splash / Landing page — animated neural-network canvas + brand copy.
-   Dismissed on "Launch" click; the main 3D app initializes behind it.
+   Custom cursor — ring + dot following mouse
+   -------------------------------------------------------------------------- */
+function mountCursor() {
+  const ring = document.createElement('div');
+  ring.id = 'cursor-ring';
+  const dot  = document.createElement('div');
+  dot.id  = 'cursor-dot';
+  document.body.appendChild(ring);
+  document.body.appendChild(dot);
+
+  let mx = -100, my = -100;
+  let rx = -100, ry = -100;
+
+  window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  // Smooth ring follows with lag; dot snaps instantly
+  function tickCursor() {
+    requestAnimationFrame(tickCursor);
+    rx += (mx - rx) * 0.14;
+    ry += (my - ry) * 0.14;
+    ring.style.left = rx + 'px';
+    ring.style.top  = ry + 'px';
+    dot.style.left  = mx + 'px';
+    dot.style.top   = my + 'px';
+  }
+  tickCursor();
+
+  // Grow ring over interactive elements
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('button, a, input, select, label, [data-action], .nav-tab, .preset-item, .layer-card');
+    if (el) {
+      ring.style.width  = '48px';
+      ring.style.height = '48px';
+      ring.style.borderColor = 'rgba(0,255,209,0.9)';
+    } else {
+      ring.style.width  = '32px';
+      ring.style.height = '32px';
+      ring.style.borderColor = 'rgba(0,255,209,0.55)';
+    }
+  });
+}
+
+/* --------------------------------------------------------------------------
+   CINEMATIC 3D ENTRY — perspective-projected rotating neural network
    -------------------------------------------------------------------------- */
 function mountSplash() {
   const splash = document.createElement('div');
   splash.id = 'splash';
   splash.className = 'splash';
 
-  const FEATURES = [
-    { label: 'Neural Net Builder', color: '#22d3ee' },
-    { label: 'CNN Architecture',   color: '#ec4899' },
-    { label: 'Transformer & Attn', color: '#a78bfa' },
-    { label: 'Convolution',        color: '#38bdf8' },
-    { label: 'Pooling',            color: '#fbbf24' },
-    { label: 'Gradient Descent',   color: '#34d399' },
+  const PILLS = [
+    { label: 'Neural Networks', color: '#22d3ee' },
+    { label: 'CNN',             color: '#ec4899' },
+    { label: 'Transformer',     color: '#a78bfa' },
+    { label: 'Convolution',     color: '#38bdf8' },
+    { label: 'Pooling',         color: '#fbbf24' },
+    { label: 'Gradient Descent',color: '#34d399' },
   ];
 
   splash.innerHTML = `
-    <canvas class="splash-canvas" id="splash-canvas"></canvas>
-    <div class="splash-content">
-      <div class="splash-logo">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
-          <circle cx="6" cy="7" r="2.2" fill="currentColor"/>
-          <circle cx="6" cy="17" r="2.2" fill="currentColor"/>
-          <circle cx="18" cy="12" r="2.2" fill="currentColor"/>
-          <circle cx="12" cy="5" r="1.5" fill="currentColor" opacity=".7"/>
-          <circle cx="12" cy="19" r="1.5" fill="currentColor" opacity=".7"/>
-          <path d="M6 7 L18 12 M6 17 L18 12 M12 5 L18 12 M12 19 L18 12 M6 7 L12 5 M6 17 L12 19"
-                stroke="currentColor" stroke-width="1.4" opacity=".75"/>
-        </svg>
+    <canvas id="splash-canvas-3d"></canvas>
+
+    <div class="splash-scanline"></div>
+
+    <!-- HUD corners -->
+    <div class="splash-corner tl"></div>
+    <div class="splash-corner tr"></div>
+    <div class="splash-corner bl"></div>
+    <div class="splash-corner br"></div>
+    <div class="splash-hud tl">
+      SYS / NEURAL-FORGE-3D<br>
+      BUILD 2026.04
+    </div>
+    <div class="splash-hud tr">
+      MODE / VISUALIZER<br>
+      STATUS READY
+    </div>
+    <div class="splash-hud bl">LAT 0.000° · LON 0.000°</div>
+    <div class="splash-hud br">GPU ACCELERATED · WebGL</div>
+
+    <!-- Main UI -->
+    <div class="splash-ui">
+      <div class="splash-title-wrap">
+        <div class="splash-title" id="splash-title">
+          <span>Neural&nbsp;</span><span class="t-forge">Forge</span><span class="t-3d">&nbsp;3D</span>
+        </div>
       </div>
-      <h1 class="splash-title">
-        Neural Forge
-        <span>3 D  Visualizer</span>
-      </h1>
-      <p class="splash-subtitle">
-        Interactive 3D exploration of neural networks, CNNs, Transformers, and
-        the fundamental operations of deep learning — all in real time.
+      <p class="splash-tagline" id="splash-tagline">
+        Interactive 3D visualizations of neural networks, CNNs,
+        Transformers, and ML theory — running live in your browser.
       </p>
-      <div class="splash-features">
-        ${FEATURES.map(f => `
-          <div class="splash-feature">
-            <span class="splash-feature-dot" style="background:${f.color};color:${f.color};"></span>
-            <span>${f.label}</span>
-          </div>
-        `).join('')}
+      <div class="splash-pills" id="splash-pills">
+        ${PILLS.map(p => `
+          <div class="splash-pill">
+            <span class="splash-pill-dot" style="background:${p.color};color:${p.color};"></span>
+            ${p.label}
+          </div>`).join('')}
       </div>
-      <button class="splash-btn" id="splash-enter">Launch →</button>
+      <div class="splash-launch-wrap" id="splash-launch-wrap">
+        <button class="splash-launch" id="splash-enter">LAUNCH</button>
+      </div>
     </div>
   `;
 
   document.body.appendChild(splash);
 
-  // ---- Animated neural-network canvas ----
-  const canvas = splash.querySelector('#splash-canvas');
+  /* ---- 3D perspective neural network ---- */
+  const canvas = document.getElementById('splash-canvas-3d');
   const ctx = canvas.getContext('2d');
 
-  function resizeSplashCanvas() {
+  const resize3D = () => {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-  }
-  resizeSplashCanvas();
-  window.addEventListener('resize', resizeSplashCanvas);
+  };
+  resize3D();
+  window.addEventListener('resize', resize3D);
 
-  // Build a random multi-layer network graph
-  const LAYERS = [3, 5, 7, 5, 3];
-  const nodes = [];
-  const edges = [];
+  // Build 3D node positions: layers of neurons
+  const NET_LAYERS = [4, 7, 9, 9, 7, 4];
+  const LAYER_GAP  = 260;
+  const SPREAD_Y   = 220;
+  const SPREAD_Z   = 90;
+  const FOV        = 700;
 
-  function rebuildGraph() {
-    nodes.length = 0;
-    edges.length = 0;
-    const W = canvas.width, H = canvas.height;
-    const lGap = W / (LAYERS.length + 1);
-    LAYERS.forEach((count, li) => {
-      const x = lGap * (li + 1);
-      const vGap = H / (count + 1);
-      for (let ni = 0; ni < count; ni++) {
-        nodes.push({ x, y: vGap * (ni + 1), r: 5 + Math.random() * 4, phase: Math.random() * Math.PI * 2 });
-      }
-    });
-    // Edges: connect adjacent layers
-    let off = 0;
-    for (let li = 0; li < LAYERS.length - 1; li++) {
-      const nA = LAYERS[li], nB = LAYERS[li + 1];
-      const offA = off, offB = off + nA;
-      for (let a = 0; a < nA; a++) {
-        for (let b = 0; b < nB; b++) {
-          edges.push({
-            a: offA + a, b: offB + b,
-            progress: Math.random(),
-            speed: 0.002 + Math.random() * 0.003,
-            color: `hsl(${180 + Math.random() * 80}, 70%, 60%)`,
-          });
-        }
-      }
-      off += nA;
+  const nodes3d = [];
+  const edges3d = [];
+
+  const totalW = (NET_LAYERS.length - 1) * LAYER_GAP;
+  NET_LAYERS.forEach((count, li) => {
+    const x3 = li * LAYER_GAP - totalW / 2;
+    for (let ni = 0; ni < count; ni++) {
+      const t = count === 1 ? 0 : ni / (count - 1) - 0.5;
+      const y3 = t * SPREAD_Y;
+      const z3 = (Math.sin(ni * 1.3 + li * 0.7) * 0.5) * SPREAD_Z;
+      nodes3d.push({
+        x: x3, y: y3, z: z3,
+        r: 3.5 + Math.random() * 2,
+        phase: li * 0.55 + ni * 0.28,
+        li,
+        hue: 165 + li * 22,
+      });
     }
+  });
+
+  // Connect adjacent layers
+  let off = 0;
+  for (let li = 0; li < NET_LAYERS.length - 1; li++) {
+    const nA = NET_LAYERS[li], nB = NET_LAYERS[li + 1];
+    const oA = off, oB = off + nA;
+    for (let a = 0; a < nA; a++) {
+      for (let b = 0; b < nB; b++) {
+        edges3d.push({
+          a: oA + a, b: oB + b,
+          progress: Math.random(),
+          speed: 0.004 + Math.random() * 0.006,
+        });
+      }
+    }
+    off += nA;
   }
-  rebuildGraph();
-  window.addEventListener('resize', () => { resizeSplashCanvas(); rebuildGraph(); });
 
-  let raf = null;
-  let t = 0;
+  // Project 3D → 2D
+  function project3d(x, y, z, rotY, W, H) {
+    const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+    const rx = x * cosY - z * sinY;
+    const rz = x * sinY + z * cosY;
+    const scale = FOV / (FOV + rz + 400);
+    return {
+      sx: W / 2 + rx * scale,
+      sy: H / 2 + y * scale * 0.85 - 60, // shift center up a bit
+      scale,
+      depth: (rz + 500) / 1000,
+    };
+  }
 
-  function drawSplash() {
-    raf = requestAnimationFrame(drawSplash);
-    t += 0.012;
+  let rotY = 0;
+  let t3d  = 0;
+  let rafId;
+
+  function draw3D() {
+    rafId = requestAnimationFrame(draw3D);
+    t3d  += 0.008;
+    rotY += 0.004;
+
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Faint radial glow background
-    const grad = ctx.createRadialGradient(W / 2, H * 0.4, 0, W / 2, H * 0.4, Math.max(W, H) * 0.7);
-    grad.addColorStop(0, 'rgba(124,58,237,0.12)');
-    grad.addColorStop(0.5, 'rgba(45,212,191,0.04)');
-    grad.addColorStop(1, 'rgba(6,6,15,0)');
-    ctx.fillStyle = grad;
+    // Ambient glow behind network
+    const gBg = ctx.createRadialGradient(W / 2, H / 2 - 60, 0, W / 2, H / 2 - 60, Math.min(W, H) * 0.55);
+    gBg.addColorStop(0,   'rgba(0,200,160,0.06)');
+    gBg.addColorStop(0.4, 'rgba(100,50,220,0.05)');
+    gBg.addColorStop(1,   'rgba(2,2,8,0)');
+    ctx.fillStyle = gBg;
     ctx.fillRect(0, 0, W, H);
 
-    // Draw edges with animated pulses
-    edges.forEach(e => {
-      const A = nodes[e.a], B = nodes[e.b];
-      if (!A || !B) return;
+    // Project all nodes
+    const projected = nodes3d.map(n => project3d(n.x, n.y, n.z, rotY, W, H));
 
-      // Static faint line
+    // Sort by depth (back-to-front)
+    const sortedEdges = [...edges3d].sort((ea, eb) => {
+      const dA = (projected[ea.a].depth + projected[ea.b].depth) / 2;
+      const dB = (projected[eb.a].depth + projected[eb.b].depth) / 2;
+      return dA - dB;
+    });
+
+    // Draw edges
+    sortedEdges.forEach(e => {
+      const pA = projected[e.a], pB = projected[e.b];
+      const avgDepth = (pA.depth + pB.depth) / 2;
+      const alpha = Math.max(0, avgDepth * 0.18 - 0.02);
+
+      // Static edge line
       ctx.beginPath();
-      ctx.moveTo(A.x, A.y);
-      ctx.lineTo(B.x, B.y);
-      ctx.strokeStyle = 'rgba(167,139,250,0.07)';
-      ctx.lineWidth = 1;
+      ctx.moveTo(pA.sx, pA.sy);
+      ctx.lineTo(pB.sx, pB.sy);
+      ctx.strokeStyle = `rgba(0,255,209,${alpha})`;
+      ctx.lineWidth = 0.5;
       ctx.stroke();
 
-      // Animated pulse traveling from A to B
+      // Traveling pulse
       e.progress = (e.progress + e.speed) % 1;
-      const px = A.x + (B.x - A.x) * e.progress;
-      const py = A.y + (B.y - A.y) * e.progress;
-      const g = ctx.createRadialGradient(px, py, 0, px, py, 8);
-      g.addColorStop(0, e.color.replace('60%)', '80%)').replace('hsl', 'hsla').replace(')', ', 0.9)'));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
+      const px = pA.sx + (pB.sx - pA.sx) * e.progress;
+      const py = pA.sy + (pB.sy - pA.sy) * e.progress;
+      const pulseR = 3 * avgDepth;
+      const gPulse = ctx.createRadialGradient(px, py, 0, px, py, pulseR * 3);
+      gPulse.addColorStop(0, `rgba(0,255,209,${avgDepth * 0.85})`);
+      gPulse.addColorStop(1, 'rgba(0,255,209,0)');
       ctx.beginPath();
-      ctx.arc(px, py, 8, 0, Math.PI * 2);
-      ctx.fillStyle = g;
+      ctx.arc(px, py, pulseR * 3, 0, Math.PI * 2);
+      ctx.fillStyle = gPulse;
       ctx.fill();
     });
 
-    // Draw nodes
-    nodes.forEach((n, idx) => {
-      const pulse = Math.sin(t * 1.8 + n.phase) * 0.25 + 0.75;
-      const r = n.r * pulse;
-      const hue = 200 + (idx % 5) * 30;
-      const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 2.5);
-      g.addColorStop(0, `hsla(${hue},80%,70%,${0.9 * pulse})`);
-      g.addColorStop(0.4, `hsla(${hue},70%,50%,${0.5 * pulse})`);
-      g.addColorStop(1, `hsla(${hue},70%,50%,0)`);
+    // Draw nodes (sorted back-to-front)
+    const sortedNodes = nodes3d
+      .map((n, i) => ({ n, p: projected[i], i }))
+      .sort((a, b) => a.p.depth - b.p.depth);
+
+    sortedNodes.forEach(({ n, p }) => {
+      const pulse = Math.sin(t3d * 2.2 + n.phase) * 0.22 + 0.78;
+      const r = n.r * p.scale * 2.2 * pulse;
+      const brightness = 35 + p.depth * 45;
+      const alpha = 0.4 + p.depth * 0.6;
+
+      // Outer glow
+      const gNode = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 3.5);
+      gNode.addColorStop(0, `hsla(${n.hue},90%,${brightness}%,${alpha * pulse * 0.7})`);
+      gNode.addColorStop(1, `hsla(${n.hue},90%,${brightness}%,0)`);
       ctx.beginPath();
-      ctx.arc(n.x, n.y, r * 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = g;
+      ctx.arc(p.sx, p.sy, r * 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = gNode;
       ctx.fill();
 
+      // Core
       ctx.beginPath();
-      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${hue},80%,75%,${0.95 * pulse})`;
+      ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${n.hue},100%,${Math.min(80, brightness + 20)}%,${alpha})`;
+      ctx.fill();
+
+      // Specular highlight
+      ctx.beginPath();
+      ctx.arc(p.sx - r * 0.25, p.sy - r * 0.25, r * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.4 * p.depth})`;
       ctx.fill();
     });
   }
 
-  drawSplash();
+  draw3D();
 
-  // Dismiss on click
+  // ---- Staggered reveal of UI elements ----
+  const reveal = (id, delay) => setTimeout(() => {
+    const el = document.getElementById(id) || splash.querySelector('.' + id);
+    if (el) el.classList.add('in');
+  }, delay);
+
+  setTimeout(() => {
+    document.getElementById('splash-title').classList.add('in');
+  }, 600);
+
+  // Reveal HUD overlays
+  splash.querySelectorAll('.splash-hud, .splash-corner').forEach(el => {
+    setTimeout(() => el.classList.add('in'), 1200);
+  });
+
+  reveal('splash-tagline',     1000);
+  reveal('splash-pills',       1500);
+  reveal('splash-launch-wrap', 2200);
+
+  // ---- Dismiss ----
   splash.querySelector('#splash-enter').addEventListener('click', () => {
-    cancelAnimationFrame(raf);
+    cancelAnimationFrame(rafId);
     splash.classList.add('hidden');
-    // Force a resize of the 3D scene after the splash fades out
     setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
       splash.remove();
-    }, 700);
+    }, 950);
   });
 }
 
+mountCursor();
 mountSplash();
 
 /* --------------------------------------------------------------------------
@@ -305,7 +425,7 @@ app.innerHTML = `
           <path d="M6 7 L18 12 M6 17 L18 12 M12 5 L18 12 M12 19 L18 12 M6 7 L12 5 M6 17 L12 19" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
         </svg>
       </div>
-      <div class="brand-name">Neural Forge<span>3D</span></div>
+      <div class="brand-name">Neural<em>Forge</em><span class="brand-3d">3D</span></div>
     </div>
 
     <nav class="nav-tabs" id="nav-tabs">
