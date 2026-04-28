@@ -293,18 +293,25 @@ function mountSplash() {
 
   function draw3D() {
     rafId = requestAnimationFrame(draw3D);
-    t3d  += 0.008;
-    rotY += 0.004;
+    t3d  += 0.007;
+    rotY += 0.0028;
 
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Ambient glow behind network
-    const gBg = ctx.createRadialGradient(W / 2, H / 2 - 60, 0, W / 2, H / 2 - 60, Math.min(W, H) * 0.55);
-    gBg.addColorStop(0,   'rgba(0,200,160,0.06)');
-    gBg.addColorStop(0.4, 'rgba(100,50,220,0.05)');
-    gBg.addColorStop(1,   'rgba(2,2,8,0)');
+    // Two-tone ambient glow — teal center fading to deep indigo edge
+    const gBg = ctx.createRadialGradient(W / 2, H / 2 - 40, 0, W / 2, H / 2 - 40, Math.min(W, H) * 0.62);
+    gBg.addColorStop(0,    'rgba(0,200,160,0.08)');
+    gBg.addColorStop(0.45, 'rgba(80,40,200,0.07)');
+    gBg.addColorStop(1,    'rgba(2,2,8,0)');
     ctx.fillStyle = gBg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle vignette so edges stay dark and text is readable
+    const gVig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W,H) * 0.3, W / 2, H / 2, Math.min(W,H) * 0.85);
+    gVig.addColorStop(0, 'rgba(2,2,8,0)');
+    gVig.addColorStop(1, 'rgba(2,2,8,0.55)');
+    ctx.fillStyle = gVig;
     ctx.fillRect(0, 0, W, H);
 
     // Project all nodes
