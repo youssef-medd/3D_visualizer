@@ -38,14 +38,32 @@ export class PoolingScene {
       mode: 'max', // 'max' | 'avg'
       animate: true,
       speed: 1.0,
+      showNumbers: true,
     };
 
     this._build();
   }
 
   setOptions(partial) {
+    const rebuildNeeded = Object.keys(partial).some(k => k !== 'showNumbers' && k !== 'animate' && k !== 'speed');
     Object.assign(this.opts, partial);
-    this._build();
+    if (rebuildNeeded) {
+      this._build();
+    } else {
+      if ('showNumbers' in partial) this._applyNumberVisibility();
+    }
+  }
+
+  _applyNumberVisibility() {
+    const show = this.opts.showNumbers;
+    // Toggle all label sprites on input cells
+    this.inputCells.forEach(row => row.forEach(cell => {
+      if (cell.userData.label) cell.userData.label.visible = show;
+    }));
+    // Toggle all label sprites on output cells
+    this.outputCells.forEach(row => row.forEach(cell => {
+      if (cell.userData.label) cell.userData.label.visible = show;
+    }));
   }
 
   _build() {
@@ -116,6 +134,7 @@ export class PoolingScene {
         });
         label.position.set(x, h + 0.45, z);
         label.scale.multiplyScalar(0.55);
+        label.visible = this.opts.showNumbers;
         cell.userData.label = label;
         inputRoot.add(label);
 
@@ -278,6 +297,7 @@ export class PoolingScene {
     });
     label.position.set(cell.position.x, cell.userData.targetH + 0.45, cell.position.z);
     label.scale.multiplyScalar(0.55);
+    label.visible = this.opts.showNumbers;
     cell.parent.add(label);
     cell.userData.label = label;
   }

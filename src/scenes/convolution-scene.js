@@ -33,14 +33,30 @@ export class ConvolutionScene {
       padding: 0,
       animate: true,
       speed: 1.0,
+      showNumbers: true,
     };
 
     this._build();
   }
 
   setOptions(partial) {
+    const rebuildNeeded = Object.keys(partial).some(k => k !== 'showNumbers' && k !== 'animate' && k !== 'speed');
     Object.assign(this.opts, partial);
-    this._build();
+    if (rebuildNeeded) {
+      this._build();
+    } else {
+      if ('showNumbers' in partial) this._applyNumberVisibility();
+    }
+  }
+
+  _applyNumberVisibility() {
+    const show = this.opts.showNumbers;
+    this.inputCells.forEach(row => row.forEach(cell => {
+      if (cell.userData.numLabel) cell.userData.numLabel.visible = show;
+    }));
+    this.outputCells.forEach(row => row.forEach(cell => {
+      if (cell.userData.numLabel) cell.userData.numLabel.visible = show;
+    }));
   }
 
   _build() {
@@ -123,6 +139,17 @@ export class ConvolutionScene {
         cell.position.set(x, h / 2, z);
         cell.userData = { i, j, baseColor: mat.color.clone(), baseEmissive: mat.emissive.clone() };
         inputRoot.add(cell);
+
+        // Numeric label showing activation value
+        const numLabel = makeTextSprite((v).toFixed(1), {
+          fontSize: 32, color: '#e2e8f0', fontWeight: 600,
+        });
+        numLabel.position.set(x, h + 0.3, z);
+        numLabel.scale.multiplyScalar(0.45);
+        numLabel.visible = this.opts.showNumbers;
+        cell.userData.numLabel = numLabel;
+        inputRoot.add(numLabel);
+
         rowCells.push(cell);
       }
       this.inputCells.push(rowCells);
@@ -266,6 +293,17 @@ export class ConvolutionScene {
     cell.userData.targetH = h;
     cell.userData.targetColor = new THREE.Color().setHSL(0.92, 0.7, 0.3 + v * 0.4);
     cell.userData.filled = true;
+
+    // Create or refresh output numeric label
+    if (cell.userData.numLabel) cell.parent.remove(cell.userData.numLabel);
+    const numLabel = makeTextSprite(v.toFixed(2), {
+      fontSize: 28, color: '#34d399', fontWeight: 600,
+    });
+    numLabel.position.set(cell.position.x, h + 0.3, cell.position.z);
+    numLabel.scale.multiplyScalar(0.45);
+    numLabel.visible = this.opts.showNumbers;
+    cell.parent.add(numLabel);
+    cell.userData.numLabel = numLabel;
   }
 
   _computeConvAt(i, j) {

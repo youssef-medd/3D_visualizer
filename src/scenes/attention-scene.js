@@ -31,6 +31,7 @@ export class AttentionScene {
       heads: 1,
       animate: true,
       speed: 1.0,
+      showNumbers: true,
     };
 
     this.matrixCells = [];
@@ -45,8 +46,20 @@ export class AttentionScene {
   }
 
   setOptions(partial) {
+    const rebuildNeeded = Object.keys(partial).some(k => k !== 'showNumbers' && k !== 'animate' && k !== 'speed');
     Object.assign(this.opts, partial);
-    this._build();
+    if (rebuildNeeded) {
+      this._build();
+    } else {
+      if ('showNumbers' in partial) this._applyNumberVisibility();
+    }
+  }
+
+  _applyNumberVisibility() {
+    const show = this.opts.showNumbers;
+    this.matrixCells.forEach(row => row.forEach(cell => {
+      if (cell.userData.numLabel) cell.userData.numLabel.visible = show;
+    }));
   }
 
   _genWeights(N) {
@@ -115,6 +128,17 @@ export class AttentionScene {
         cell.position.set(x, h / 2, z);
         cell.userData = { i, j, w, baseColor: mat.color.clone(), baseEmissive: mat.emissive.clone() };
         matRoot.add(cell);
+
+        // Attention weight numeric label
+        const numLabel = makeTextSprite(w.toFixed(2), {
+          fontSize: 24, color: '#f0f9ff', fontWeight: 600,
+        });
+        numLabel.position.set(x, h + 0.22, z);
+        numLabel.scale.multiplyScalar(0.38);
+        numLabel.visible = this.opts.showNumbers;
+        cell.userData.numLabel = numLabel;
+        matRoot.add(numLabel);
+
         row.push(cell);
       }
       this.matrixCells.push(row);

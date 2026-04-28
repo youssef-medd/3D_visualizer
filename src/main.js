@@ -97,10 +97,10 @@ const state = {
   // Per-tab UI state for the LEFT sidebar (which sub-section is open).
   archSidebarSection: 'library', // 'library' | 'style'
   theory: {
-    convolution: { kernelSize: 3, stride: 1, padding: 1, inputSize: 8, animate: true, speed: 1.0 },
-    pooling:     { kernelSize: 2, stride: 2, inputSize: 4, mode: 'max', animate: true, speed: 1.0 },
-    attention:   { seqLen: 6, animate: true, speed: 1.0 },
-    gradientDescent: { learningRate: 0.05, animate: true, speed: 1.0 },
+    convolution: { kernelSize: 3, stride: 1, padding: 1, inputSize: 8, animate: true, speed: 1.0, showNumbers: true },
+    pooling:     { kernelSize: 2, stride: 2, inputSize: 4, mode: 'max', animate: true, speed: 1.0, showNumbers: true },
+    attention:   { seqLen: 6, animate: true, speed: 1.0, showNumbers: true },
+    gradientDescent: { learningRate: 0.05, animate: true, speed: 1.0, showNumbers: true },
   },
 };
 
@@ -878,6 +878,7 @@ function renderTheorySidebarLeft() {
           ${rangeControlGeneric('Padding', 'padding', o.padding, 0, 3, 1, 'convolution')}
           ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'convolution')}
           ${theoryToggle('Animate', 'animate', o.animate, 'convolution')}
+          ${theoryToggle('Show numbers', 'showNumbers', o.showNumbers, 'convolution')}
         </div>
       </div>
       <div class="section">
@@ -905,6 +906,7 @@ function renderTheorySidebarLeft() {
             </div>
           </div>
           ${theoryToggle('Animate', 'animate', o.animate, 'pooling')}
+          ${theoryToggle('Show numbers', 'showNumbers', o.showNumbers, 'pooling')}
         </div>
       </div>
       <div class="section">
@@ -934,6 +936,7 @@ function renderTheorySidebarLeft() {
           ${rangeControlGeneric('Sequence length', 'seqLen', o.seqLen, 3, 10, 1, 'attention')}
           ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'attention')}
           ${theoryToggle('Animate', 'animate', o.animate, 'attention')}
+          ${theoryToggle('Show numbers', 'showNumbers', o.showNumbers, 'attention')}
         </div>
       </div>
       <div class="section">
@@ -952,6 +955,7 @@ function renderTheorySidebarLeft() {
           ${rangeControlGeneric('Learning rate', 'learningRate', o.learningRate, 0.005, 0.25, 0.005, 'gradientDescent')}
           ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'gradientDescent')}
           ${theoryToggle('Animate', 'animate', o.animate, 'gradientDescent')}
+          ${theoryToggle('Show numbers', 'showNumbers', o.showNumbers, 'gradientDescent')}
         </div>
         <div class="btn-row" style="margin-top:12px;">
           <button class="btn btn-primary" id="btn-reset-optim">${iconHTML('reset_play')}<span>Reset optimizers</span></button>
