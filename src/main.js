@@ -6,6 +6,7 @@ import { ConvolutionScene } from './scenes/convolution-scene.js';
 import { AttentionScene } from './scenes/attention-scene.js';
 import { GradientDescentScene } from './scenes/gradient-descent-scene.js';
 import { PoolingScene } from './scenes/pooling-scene.js';
+import { PipelineScene } from './scenes/pipeline-scene.js';
 import { StyleManager } from './util/style-manager.js';
 
 import {
@@ -37,7 +38,7 @@ import { iconHTML } from './ui/icons.js';
    ========================================================================== */
 
 const ARCH_TABS = ['nn', 'cnn', 'transformer'];
-const THEORY_TABS = ['convolution', 'pooling', 'attention', 'gradientDescent'];
+const THEORY_TABS = ['convolution', 'pooling', 'attention', 'gradientDescent', 'pipeline'];
 
 const TAB_LABELS = {
   nn: 'Neural Net',
@@ -47,6 +48,7 @@ const TAB_LABELS = {
   pooling: 'Pooling',
   attention: 'Attention',
   gradientDescent: 'Gradient Descent',
+  pipeline: 'ML Pipeline',
 };
 
 const TAB_SUBLABEL = {
@@ -57,6 +59,7 @@ const TAB_SUBLABEL = {
   pooling: 'Max / Avg over windows',
   attention: 'Q · K · V dot products',
   gradientDescent: 'Loss landscapes',
+  pipeline: 'NN → Loss → CNN chain',
 };
 
 const LAYER_CSS_VAR = {
@@ -101,6 +104,7 @@ const state = {
     pooling:     { kernelSize: 2, stride: 2, inputSize: 4, mode: 'max', animate: true, speed: 1.0, showNumbers: true },
     attention:   { seqLen: 6, animate: true, speed: 1.0, showNumbers: true },
     gradientDescent: { learningRate: 0.05, animate: true, speed: 1.0, showNumbers: true },
+    pipeline: { animate: true, speed: 1.0, showNumbers: true },
   },
 };
 
@@ -472,12 +476,14 @@ const convScene = new ConvolutionScene();
 const attnScene = new AttentionScene();
 const gradScene = new GradientDescentScene();
 const poolScene = new PoolingScene();
+const pipeScene = new PipelineScene();
 
 sceneHost.register('architecture', archScene);
 sceneHost.register('convolution', convScene);
 sceneHost.register('attention', attnScene);
 sceneHost.register('gradientDescent', gradScene);
 sceneHost.register('pooling', poolScene);
+sceneHost.register('pipeline', pipeScene);
 
 // React to global style changes that affect the renderer (bloom, etc.)
 style.subscribe((s, partial) => {
@@ -518,6 +524,7 @@ function switchTab(tab) {
     else if (tab === 'attention') attnScene.setOptions(opts);
     else if (tab === 'gradientDescent') gradScene.setOptions(opts);
     else if (tab === 'pooling') poolScene.setOptions(opts);
+    else if (tab === 'pipeline') pipeScene.setOptions(opts);
     sceneHost.activate(tab);
   }
 
@@ -1274,6 +1281,24 @@ function renderTheorySidebarLeft() {
     left.querySelector('#btn-reset-optim').addEventListener('click', () => {
       gradScene.reset();
     });
+  } else if (tab === 'pipeline') {
+    const o = state.theory.pipeline;
+    left.innerHTML = `
+      <div class="section">
+        <div class="section-title">${iconHTML('controls')}<span>Pipeline Controls</span></div>
+        <div class="card">
+          ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'pipeline')}
+          ${theoryToggle('Animate', 'animate', o.animate, 'pipeline')}
+          ${theoryToggle('Show labels', 'showNumbers', o.showNumbers, 'pipeline')}
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('insight')}<span>What to look for</span></div>
+        <div class="insight">Left: fully-connected NN. Pulsing nodes signal forward propagation through layers.</div>
+        <div class="insight">Center: the loss scalar L(θ). All training optimizes this number toward zero.</div>
+        <div class="insight">Right: CNN layers (Conv → Pool → FC). Gradient arrows flow backwards — that's backpropagation updating weights.</div>
+      </div>
+    `;
   }
 
   // Wire theory range/toggle inputs
@@ -1330,6 +1355,7 @@ function applyTheoryOptions(tab) {
   else if (tab === 'attention') attnScene.setOptions(o);
   else if (tab === 'gradientDescent') gradScene.setOptions(o);
   else if (tab === 'pooling') poolScene.setOptions(o);
+  else if (tab === 'pipeline') pipeScene.setOptions(o);
 }
 
 function renderTheorySidebarRight() {
@@ -1433,6 +1459,30 @@ function renderTheorySidebarRight() {
         <div class="insight">Loss surfaces of real networks are extremely high-dimensional, but local geometry still matters.</div>
       </div>
     `;
+  } else if (state.activeTab === 'pipeline') {
+    right.innerHTML = `
+      <div class="section">
+        <div class="section-title">${iconHTML('brain')}<span>Concept</span></div>
+        <div class="card">
+          <div class="card-title">The ML training loop</div>
+          <p style="color:var(--text-2);font-size:13px;line-height:1.6;margin:0 0 10px;">
+            Every deep-learning training run follows the same cycle: a <strong style="color:var(--text);">forward pass</strong>
+            computes predictions, the <strong style="color:var(--text);">loss</strong> measures how wrong they are, and
+            <strong style="color:var(--text);">backpropagation</strong> computes gradients flowing from output back to input layers.
+          </p>
+          <p style="color:var(--text-2);font-size:13px;line-height:1.6;margin:0;">
+            The colored arrows on the arches show this gradient flow — purple traveling right → left from the loss through the NN;
+            pink from the loss back through the CNN feature extractor.
+          </p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('insight')}<span>Why it matters</span></div>
+        <div class="insight">NN weights and CNN filters are all updated by the same gradient — one backward pass updates the entire model.</div>
+        <div class="insight">The loss is the single number that drives everything. Choosing the right loss function is a design decision.</div>
+        <div class="insight">In practice the model is ONE network; the NN and CNN here represent different architectural blocks in the same graph.</div>
+      </div>
+    `;
   }
 }
 
@@ -1441,37 +1491,42 @@ function renderTheoryOverlay() {
   if (state.activeTab === 'convolution') {
     el.innerHTML = `
       <h3>Convolution</h3>
-      <p>Kernel slides over the input, computing local weighted sums. Same kernel everywhere — that's parameter sharing.</p>
-      <div class="equation">
-        y[i, j] = Σ<small>k,l</small> &nbsp; x[i·s + k − p, j·s + l − p] · w[k, l]
-      </div>
+      <p>Kernel slides over the input, computing local weighted sums. Same kernel everywhere — parameter sharing.</p>
+      <div class="equation">y[i,j] = &Sigma;<sub>k,l</sub> x[i&middot;s+k&minus;p, j&middot;s+l&minus;p] &middot; w[k,l]</div>
+      <div class="equation">outSize = &lfloor;(N + 2P &minus; K) / S&rfloor; + 1</div>
     `;
   } else if (state.activeTab === 'pooling') {
     const mode = state.theory.pooling.mode;
     el.innerHTML = `
-      <h3>Pooling — ${mode === 'max' ? 'max' : 'average'}</h3>
-      <p>The window collapses K×K input cells into one output. Numbers above each cell make the operation literal.</p>
-      <div class="equation">
-        ${mode === 'max'
-          ? 'y[i, j] = max<small>k,l ∈ window</small>  x[i·s + k, j·s + l]'
-          : 'y[i, j] = (1/K²) · Σ<small>k,l ∈ window</small>  x[i·s + k, j·s + l]'}
-      </div>
+      <h3>Pooling &mdash; ${mode === 'max' ? 'max' : 'average'}</h3>
+      <p>Collapses K&times;K cells into one. Watch the active window and result number.</p>
+      <div class="equation">${mode === 'max'
+        ? 'y[i,j] = max<sub>k,l</sub> x[i&middot;s+k, j&middot;s+l]'
+        : 'y[i,j] = (1/K&sup2;) &middot; &Sigma;<sub>k,l</sub> x[i&middot;s+k, j&middot;s+l]'
+      }</div>
+      <div class="equation">outSize = &lfloor;(N &minus; K) / S&rfloor; + 1</div>
     `;
   } else if (state.activeTab === 'attention') {
     el.innerHTML = `
       <h3>Self-attention</h3>
-      <p>Each query attends to all keys. Softmaxed scores weight the values into a single output per token.</p>
-      <div class="equation">
-        Attention(Q, K, V) = softmax( Q·K<small>ᵀ</small> / √d<small>k</small> ) · V
-      </div>
+      <p>Each query attends to all keys. Softmaxed scores weight the values into a context vector.</p>
+      <div class="equation">Attention(Q,K,V) = softmax(QK<sup>T</sup> / &radic;d<sub>k</sub>) &middot; V</div>
     `;
   } else if (state.activeTab === 'gradientDescent') {
     el.innerHTML = `
       <h3>Gradient descent</h3>
-      <p>Optimizers navigate the loss landscape by stepping opposite to the gradient. Step size η is the learning rate.</p>
-      <div class="equation">
-        θ ← θ − η · ∇<small>θ</small> L(θ)
-      </div>
+      <p>Step opposite to the gradient. &eta; is the learning rate.</p>
+      <div class="equation">&theta; &larr; &theta; &minus; &eta; &middot; &nabla;<sub>&theta;</sub> L(&theta;)</div>
+      <div class="equation">SGD: v = &beta;v + g &nbsp;&nbsp; &theta; &larr; &theta; &minus; &eta;v</div>
+    `;
+  } else if (state.activeTab === 'pipeline') {
+    el.innerHTML = `
+      <h3>Training Loop</h3>
+      <p>One full iteration: forward pass computes &ycirc;, loss measures error, backprop flows gradients.</p>
+      <div class="equation">Forward:  &ycirc; = f(x; &theta;)</div>
+      <div class="equation">Loss:     L = &ell;(&ycirc;, y)</div>
+      <div class="equation">Backward: &nabla;&theta; = &part;L / &part;&theta;</div>
+      <div class="equation">Update:   &theta; &larr; &theta; &minus; &eta; &nabla;&theta;</div>
     `;
   }
 }

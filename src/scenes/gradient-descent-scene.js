@@ -4,32 +4,21 @@ import { setupLights, addGroundGrid, makeTextSprite, clearGroup } from '../util/
 /**
  * GradientDescentScene
  *
- * Full ML-pipeline scene showing how gradient descent connects all
- * three major architecture types in a single chain:
- *
- *   [Mini NN]  ←—  Loss Surface (3 optimizers)  —→  [Mini CNN]
- *
- * Animated gradient arrows flow BACKWARDS (right → left) through the
- * chain, visualising backpropagation. The loss surface stays at centre
- * with SGD / Momentum / Adam dots running on it. On the left a small
- * fully-connected network pulses; on the right a mini CNN (conv+pool
- * boxes) pulses. Labels and connecting arches tie everything together.
- *
- * Controls:
- *   - learningRate, animate, speed  (same as before)
- *   - showNumbers: show/hide loss values on surface and optimizer labels
+ * Loss landscape with three optimizers (SGD / Momentum / Adam) racing
+ * toward the minimum. Camera sits above the surface for a clear bird's-eye
+ * view of how each algorithm navigates valleys and saddle points.
  */
 export class GradientDescentScene {
   constructor() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog('#06070d', 40, 130);
+    this.scene.fog = new THREE.Fog('#06070d', 25, 90);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 260);
-    this.camera.position.set(0, 16, 36);
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+    this.camera.position.set(0, 13, 22);
     this.camera.lookAt(0, 0, 0);
 
     setupLights(this.scene);
-    addGroundGrid(this.scene, 100, 50, -5);
+    addGroundGrid(this.scene, 60, 30, -4);
 
     this.root = new THREE.Group();
     this.scene.add(this.root);
@@ -42,10 +31,6 @@ export class GradientDescentScene {
       gridSize: 14,
       showNumbers: true,
     };
-
-    this._gradArrows = [];
-    this._gradArrowT = [];
-    this._gradT = 0;
 
     this._build();
   }
@@ -79,16 +64,8 @@ export class GradientDescentScene {
 
   _build() {
     clearGroup(this.root);
-    this._gradArrows = [];
-    this._gradArrowT = [];
-    this._lossNumbers = [];
-
     this._buildSurface();
     this._buildOptimizers();
-    this._buildMiniNN();
-    this._buildMiniCNN();
-    this._buildChainConnectors();
-    this._buildPipelineLabel();
   }
 
   // ------------------------------------------------------------------ loss surface
@@ -131,7 +108,7 @@ export class GradientDescentScene {
 
     const mat = new THREE.MeshPhysicalMaterial({
       vertexColors: true, roughness: 0.55, metalness: 0.1,
-      clearcoat: 0.4, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+      clearcoat: 0.4, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
     });
     this.surfaceMesh = new THREE.Mesh(geo, mat);
     this.surfaceMesh.position.y = -1;
@@ -144,7 +121,7 @@ export class GradientDescentScene {
     this.root.add(this.wireMesh);
 
     const surfLabel = makeTextSprite('Loss  L(θ)', { fontSize: 26 });
-    surfLabel.position.set(0, 4.2, -gridSize / 2 - 0.5);
+    surfLabel.position.set(0, 4.5, -gridSize / 2 - 0.5);
     this.root.add(surfLabel);
   }
 
@@ -235,215 +212,13 @@ export class GradientDescentScene {
     opt.z = Math.max(-half, Math.min(half, opt.z));
   }
 
-  // ------------------------------------------------------------------ mini NN
-
-  _buildMiniNN() {
-    if (this.nnGroup) { this.root.remove(this.nnGroup); }
-    const g = new THREE.Group();
-    g.position.set(-18, 0, 0);
-    this.root.add(g);
-    this.nnGroup = g;
-
-    const LAYERS = [3, 4, 4, 2];
-    const spacing = 2.5;
-    const nodeR   = 0.35;
-    const startX  = -((LAYERS.length - 1) * spacing) / 2;
-    this._nnNodes  = [];
-    this._nnEdges  = [];
-
-    LAYERS.forEach((count, li) => {
-      const x = startX + li * spacing;
-      const rowNodes = [];
-      for (let ni = 0; ni < count; ni++) {
-        const y = (ni - (count - 1) / 2) * 1.2;
-        const hue = 200 + li * 35;
-        const geo = new THREE.SphereGeometry(nodeR, 20, 16);
-        const mat = new THREE.MeshPhysicalMaterial({
-          color: `hsl(${hue},70%,55%)`,
-          emissive: `hsl(${hue},70%,35%)`,
-          emissiveIntensity: 0.5,
-          metalness: 0.2,
-          roughness: 0.3,
-          clearcoat: 0.8,
-        });
-        const sphere = new THREE.Mesh(geo, mat);
-        sphere.position.set(x, y, 0);
-        sphere.userData.phase = li * 0.7 + ni * 0.3;
-        g.add(sphere);
-        rowNodes.push(sphere);
-      }
-      this._nnNodes.push(rowNodes);
-    });
-
-    // Edges
-    for (let li = 0; li < LAYERS.length - 1; li++) {
-      const rowA = this._nnNodes[li], rowB = this._nnNodes[li + 1];
-      rowA.forEach(nA => {
-        rowB.forEach(nB => {
-          const points = [nA.position.clone(), nB.position.clone()];
-          const geo2 = new THREE.BufferGeometry().setFromPoints(points);
-          const mat2 = new THREE.LineBasicMaterial({ color: '#a78bfa', transparent: true, opacity: 0.22 });
-          const line = new THREE.Line(geo2, mat2);
-          g.add(line);
-          this._nnEdges.push({ line, nA, nB, mat: mat2, phase: Math.random() * Math.PI * 2 });
-        });
-      });
-    }
-
-    // Labels
-    const nnTitle = makeTextSprite('Neural Net', { fontSize: 26, color: '#c4b5fd' });
-    nnTitle.position.set(0, 3.4, 0);
-    g.add(nnTitle);
-
-    const nnSub = makeTextSprite('W, b  →  ∇L  →  θ update', { fontSize: 18, color: '#7c6fa0' });
-    nnSub.position.set(0, -3.2, 0);
-    nnSub.visible = this.opts.showNumbers;
-    this._nnSubLabel = nnSub;
-    g.add(nnSub);
-  }
-
-  // ------------------------------------------------------------------ mini CNN
-
-  _buildMiniCNN() {
-    if (this.cnnGroup) { this.root.remove(this.cnnGroup); }
-    const g = new THREE.Group();
-    g.position.set(18, 0, 0);
-    this.root.add(g);
-    this.cnnGroup = g;
-
-    // Represent CNN as stacked feature-map slabs
-    const layers = [
-      { w: 2.4, h: 2.4, d: 0.5, color: '#ec4899', label: 'Input' },
-      { w: 2.0, h: 2.0, d: 1.0, color: '#a78bfa', label: 'Conv' },
-      { w: 1.4, h: 1.4, d: 1.4, color: '#22d3ee', label: 'Pool' },
-      { w: 1.0, h: 1.0, d: 0.9, color: '#34d399', label: 'Conv' },
-      { w: 0.4, h: 3.2, d: 0.4, color: '#fbbf24', label: 'FC' },
-    ];
-
-    const spacing = 2.8;
-    const startX = -((layers.length - 1) * spacing) / 2;
-    this._cnnSlabs = [];
-
-    layers.forEach((l, idx) => {
-      const x = startX + idx * spacing;
-      const geo = new THREE.BoxGeometry(l.w, l.h, l.d);
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: l.color, emissive: l.color, emissiveIntensity: 0.35,
-        transparent: true, opacity: 0.72, roughness: 0.3, metalness: 0.1,
-        clearcoat: 0.6,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, 0, 0);
-      mesh.userData.baseEmissive = 0.35;
-      mesh.userData.phase = idx * 0.5;
-      g.add(mesh);
-
-      // Edge outline
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geo),
-        new THREE.LineBasicMaterial({ color: l.color, transparent: true, opacity: 0.55 }),
-      );
-      edges.position.copy(mesh.position);
-      g.add(edges);
-
-      this._cnnSlabs.push(mesh);
-
-      // Connecting line to next slab
-      if (idx < layers.length - 1) {
-        const nextX = startX + (idx + 1) * spacing;
-        const pts = [new THREE.Vector3(x + l.w / 2, 0, 0), new THREE.Vector3(nextX - layers[idx + 1].w / 2, 0, 0)];
-        const lg = new THREE.BufferGeometry().setFromPoints(pts);
-        const lm = new THREE.LineBasicMaterial({ color: '#4b5563', transparent: true, opacity: 0.5 });
-        g.add(new THREE.Line(lg, lm));
-      }
-
-      // Layer label
-      const lbl = makeTextSprite(l.label, { fontSize: 20, color: l.color });
-      lbl.position.set(x, -l.h / 2 - 0.7, 0);
-      lbl.scale.multiplyScalar(0.85);
-      g.add(lbl);
-    });
-
-    const cnnTitle = makeTextSprite('CNN', { fontSize: 26, color: '#f9a8d4' });
-    cnnTitle.position.set(0, 3.4, 0);
-    g.add(cnnTitle);
-
-    const cnnSub = makeTextSprite('Conv → Pool → FC  →  ∇L', { fontSize: 18, color: '#7c6fa0' });
-    cnnSub.position.set(0, -3.2, 0);
-    cnnSub.visible = this.opts.showNumbers;
-    this._cnnSubLabel = cnnSub;
-    g.add(cnnSub);
-  }
-
-  // ------------------------------------------------------------------ chain connectors
-
-  _buildChainConnectors() {
-    // Two arched lines: NN → Loss and Loss → CNN, with animated gradient dots
-    const archPairs = [
-      { from: new THREE.Vector3(-11, 1, 0), to: new THREE.Vector3(-7.5, 1, 0), color: '#a78bfa' },
-      { from: new THREE.Vector3(7.5, 1, 0),  to: new THREE.Vector3(11, 1, 0),  color: '#f472b6' },
-    ];
-
-    this._chainDots = [];
-
-    archPairs.forEach((pair, pi) => {
-      // Static arch
-      const mid = new THREE.Vector3().lerpVectors(pair.from, pair.to, 0.5);
-      mid.y += 2.5;
-      const curve = new THREE.QuadraticBezierCurve3(pair.from, mid, pair.to);
-      const pts = curve.getPoints(40);
-      const geo = new THREE.BufferGeometry().setFromPoints(pts);
-      const mat = new THREE.LineBasicMaterial({ color: pair.color, transparent: true, opacity: 0.35 });
-      this.root.add(new THREE.Line(geo, mat));
-
-      // Animated dot on the arch — travels FROM loss surface backward to NN/CNN
-      const dotGeo = new THREE.SphereGeometry(0.18, 14, 10);
-      const dotMat = new THREE.MeshPhysicalMaterial({
-        color: pair.color, emissive: pair.color, emissiveIntensity: 1.4,
-        metalness: 0.1, roughness: 0.1,
-      });
-      const dot = new THREE.Mesh(dotGeo, dotMat);
-      this.root.add(dot);
-      // Animate dot from "to" → "from" (backprop direction)
-      this._chainDots.push({ curve, dot, t: pi * 0.5 % 1, dir: -1 /* backward = gradient flow */ });
-    });
-
-    // Arrow labels
-    const bpLabel1 = makeTextSprite('∇ backprop', { fontSize: 20, color: '#a78bfa' });
-    bpLabel1.position.set(-9.5, 4.2, 0);
-    bpLabel1.scale.multiplyScalar(0.9);
-    bpLabel1.visible = this.opts.showNumbers;
-    this._bpLabel1 = bpLabel1;
-    this.root.add(bpLabel1);
-
-    const bpLabel2 = makeTextSprite('∇ backprop', { fontSize: 20, color: '#f472b6' });
-    bpLabel2.position.set(9.5, 4.2, 0);
-    bpLabel2.scale.multiplyScalar(0.9);
-    bpLabel2.visible = this.opts.showNumbers;
-    this._bpLabel2 = bpLabel2;
-    this.root.add(bpLabel2);
-  }
-
-  // ------------------------------------------------------------------ pipeline label
-
-  _buildPipelineLabel() {
-    const label = makeTextSprite('Training Pipeline: NN ←—— Loss Surface ——→ CNN', { fontSize: 24 });
-    label.position.set(0, 7.5, 0);
-    this.root.add(label);
-  }
-
   // ------------------------------------------------------------------ number visibility
 
   _applyNumberVisibility() {
     const show = this.opts.showNumbers;
-    // Optimizer name labels
     this.optimizerMarkers?.forEach(opt => {
       if (opt.marker.userData.nameLabel) opt.marker.userData.nameLabel.visible = show;
     });
-    if (this._nnSubLabel) this._nnSubLabel.visible = show;
-    if (this._cnnSubLabel) this._cnnSubLabel.visible = show;
-    if (this._bpLabel1) this._bpLabel1.visible = show;
-    if (this._bpLabel2) this._bpLabel2.visible = show;
   }
 
   // ------------------------------------------------------------------ update
@@ -451,7 +226,6 @@ export class GradientDescentScene {
   update(dt, t) {
     if (!this.opts.animate) return;
 
-    // --- Optimizer stepping ---
     if (this.optimizerMarkers) {
       this._stepTimer = (this._stepTimer || 0) + dt * this.opts.speed;
       const stepEvery = 0.06;
@@ -477,58 +251,14 @@ export class GradientDescentScene {
           trail.line.geometry.setDrawRange(0, n);
         });
       }
-      // Pulse optimizer markers
       this.optimizerMarkers.forEach((opt, idx) => {
         const pulse = 0.85 + Math.sin(t * 3 + idx) * 0.15;
         opt.marker.material.emissiveIntensity = 0.7 + pulse * 0.4;
       });
     }
-
-    // --- Mini NN: pulse nodes + animate edge opacity ---
-    if (this._nnNodes) {
-      this._nnNodes.forEach((row, li) => {
-        row.forEach((node, ni) => {
-          const p = Math.sin(t * 2.2 + node.userData.phase) * 0.5 + 0.5;
-          node.material.emissiveIntensity = 0.3 + p * 0.8;
-          node.scale.setScalar(0.9 + p * 0.15);
-        });
-      });
-      // Animate edges to simulate signal propagation (left to right)
-      this._nnEdges.forEach((e, idx) => {
-        const wave = (Math.sin(t * 3.5 + e.phase) * 0.5 + 0.5) * 0.6 + 0.1;
-        e.mat.opacity = wave;
-      });
-    }
-
-    // --- Mini CNN: pulse slabs ---
-    if (this._cnnSlabs) {
-      this._cnnSlabs.forEach((slab, idx) => {
-        const p = Math.sin(t * 1.8 + slab.userData.phase) * 0.5 + 0.5;
-        slab.material.emissiveIntensity = 0.2 + p * 0.55;
-        slab.material.opacity = 0.55 + p * 0.25;
-      });
-    }
-
-    // --- Chain dots: travel along the arch (backwards = backprop direction) ---
-    if (this._chainDots) {
-      this._chainDots.forEach(cd => {
-        cd.t = (cd.t + dt * this.opts.speed * 0.38) % 1;
-        // dir -1: dot goes from "to" → "from" (reverse = backprop)
-        const tPos = 1 - cd.t;
-        const pos = cd.curve.getPoint(tPos);
-        cd.dot.position.copy(pos);
-        // Pulse size
-        const pulse = 0.75 + Math.sin(t * 4) * 0.25;
-        cd.dot.scale.setScalar(pulse);
-        cd.dot.material.emissiveIntensity = 0.8 + pulse * 0.7;
-      });
-    }
   }
 
-  reset() {
-    this._resetOptimizers();
-  }
-
+  reset() { this._resetOptimizers(); }
   onActivate() {}
   onDeactivate() {}
 }

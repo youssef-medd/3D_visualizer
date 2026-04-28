@@ -361,9 +361,12 @@ export class ConvolutionScene {
         const targetH = cell.userData.targetH ?? 0.05;
         const cs = this._cellSize;
         const currentH = cell.scale.y * 0.05;
-        const newScale = cell.scale.y + (targetH / 0.05 - cell.scale.y) * Math.min(1, dt * 6);
-        cell.scale.y = newScale;
-        cell.position.y = (newScale * 0.05) / 2;
+        const targetScale = targetH / 0.05;
+        const newScale = cell.scale.y + (targetScale - cell.scale.y) * Math.min(1, dt * 6);
+        // Clamp to avoid scale=0 which produces degenerate matrices (NaN normals → black screen)
+        const clampedScale = Math.max(0.001, newScale);
+        cell.scale.y = clampedScale;
+        cell.position.y = (clampedScale * 0.05) / 2;
         if (cell.userData.targetColor) {
           cell.material.color.lerp(cell.userData.targetColor, Math.min(1, dt * 4));
           cell.material.emissive.lerp(cell.userData.targetColor, Math.min(1, dt * 4));
