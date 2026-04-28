@@ -160,55 +160,58 @@ function mountSplash() {
   splash.className = 'splash';
 
   const PILLS = [
-    { label: 'Neural Networks', color: '#22d3ee' },
-    { label: 'CNN',             color: '#ec4899' },
-    { label: 'Transformer',     color: '#a78bfa' },
-    { label: 'Convolution',     color: '#38bdf8' },
-    { label: 'Pooling',         color: '#fbbf24' },
-    { label: 'Gradient Descent',color: '#34d399' },
+    'Neural Net', 'CNN', 'Transformer',
+    'Convolution', 'Pooling', 'Attention',
+    'Gradient Descent', 'ML Pipeline',
   ];
 
   splash.innerHTML = `
     <canvas id="splash-canvas-3d"></canvas>
 
-    <div class="splash-scanline"></div>
-
-    <!-- HUD corners -->
-    <div class="splash-corner tl"></div>
-    <div class="splash-corner tr"></div>
-    <div class="splash-corner bl"></div>
-    <div class="splash-corner br"></div>
-    <div class="splash-hud tl">
-      SYS / NEURAL-FORGE-3D<br>
-      BUILD 2026.04
-    </div>
-    <div class="splash-hud tr">
-      MODE / VISUALIZER<br>
-      STATUS READY
-    </div>
-    <div class="splash-hud bl">LAT 0.000° · LON 0.000°</div>
-    <div class="splash-hud br">GPU ACCELERATED · WebGL</div>
-
-    <!-- Main UI -->
+    <!-- Content layer -->
     <div class="splash-ui">
-      <div class="splash-title-wrap">
-        <div class="splash-title" id="splash-title">
-          <span>Neural&nbsp;</span><span class="t-forge">Forge</span><span class="t-3d">&nbsp;3D</span>
-        </div>
+
+      <div class="splash-badge" id="splash-badge">
+        <span class="splash-badge-dot"></span>
+        Interactive 3D Visualizer
       </div>
-      <p class="splash-tagline" id="splash-tagline">
-        Interactive 3D visualizations of neural networks, CNNs,
-        Transformers, and ML theory — running live in your browser.
+
+      <h1 class="splash-title" id="splash-title">
+        Neural<em>Forge</em><span class="t-3d">3D</span>
+      </h1>
+
+      <p class="splash-sub" id="splash-sub">
+        Explore neural networks, CNNs, Transformers and core ML theory
+        through real-time interactive 3D — live in your browser.
       </p>
+
       <div class="splash-pills" id="splash-pills">
-        ${PILLS.map(p => `
-          <div class="splash-pill">
-            <span class="splash-pill-dot" style="background:${p.color};color:${p.color};"></span>
-            ${p.label}
-          </div>`).join('')}
+        ${PILLS.map(p => `<span class="splash-pill">${p}</span>`).join('')}
       </div>
-      <div class="splash-launch-wrap" id="splash-launch-wrap">
-        <button class="splash-launch" id="splash-enter">LAUNCH</button>
+
+      <div class="splash-enter-wrap" id="splash-enter-wrap">
+        <button class="splash-enter" id="splash-enter">Explore &rarr;</button>
+      </div>
+
+    </div>
+
+    <!-- Bottom stat strip -->
+    <div class="splash-stats" id="splash-stats">
+      <div class="splash-stat">
+        <div class="splash-stat-num">7</div>
+        <div class="splash-stat-label">Live<br>Scenes</div>
+      </div>
+      <div class="splash-stat">
+        <div class="splash-stat-num">5</div>
+        <div class="splash-stat-label">Theory<br>Modules</div>
+      </div>
+      <div class="splash-stat">
+        <div class="splash-stat-num">3D</div>
+        <div class="splash-stat-label">Real-time<br>Render</div>
+      </div>
+      <div class="splash-stat">
+        <div class="splash-stat-num">&infin;</div>
+        <div class="splash-stat-label">Free to<br>Explore</div>
       </div>
     </div>
   `;
@@ -378,24 +381,18 @@ function mountSplash() {
 
   draw3D();
 
-  // ---- Staggered reveal of UI elements ----
+  // ---- Staggered reveal ----
   const reveal = (id, delay) => setTimeout(() => {
-    const el = document.getElementById(id) || splash.querySelector('.' + id);
+    const el = document.getElementById(id);
     if (el) el.classList.add('in');
   }, delay);
 
-  setTimeout(() => {
-    document.getElementById('splash-title').classList.add('in');
-  }, 600);
-
-  // Reveal HUD overlays
-  splash.querySelectorAll('.splash-hud, .splash-corner').forEach(el => {
-    setTimeout(() => el.classList.add('in'), 1200);
-  });
-
-  reveal('splash-tagline',     1000);
-  reveal('splash-pills',       1500);
-  reveal('splash-launch-wrap', 2200);
+  reveal('splash-badge',      420);
+  reveal('splash-title',      720);
+  reveal('splash-sub',        1020);
+  reveal('splash-pills',      1300);
+  reveal('splash-enter-wrap', 1680);
+  reveal('splash-stats',      2000);
 
   // ---- Dismiss ----
   splash.querySelector('#splash-enter').addEventListener('click', () => {
