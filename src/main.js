@@ -105,6 +105,189 @@ const state = {
 };
 
 /* --------------------------------------------------------------------------
+   Splash / Landing page — animated neural-network canvas + brand copy.
+   Dismissed on "Launch" click; the main 3D app initializes behind it.
+   -------------------------------------------------------------------------- */
+function mountSplash() {
+  const splash = document.createElement('div');
+  splash.id = 'splash';
+  splash.className = 'splash';
+
+  const FEATURES = [
+    { label: 'Neural Net Builder', color: '#22d3ee' },
+    { label: 'CNN Architecture',   color: '#ec4899' },
+    { label: 'Transformer & Attn', color: '#a78bfa' },
+    { label: 'Convolution',        color: '#38bdf8' },
+    { label: 'Pooling',            color: '#fbbf24' },
+    { label: 'Gradient Descent',   color: '#34d399' },
+  ];
+
+  splash.innerHTML = `
+    <canvas class="splash-canvas" id="splash-canvas"></canvas>
+    <div class="splash-content">
+      <div class="splash-logo">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+          <circle cx="6" cy="7" r="2.2" fill="currentColor"/>
+          <circle cx="6" cy="17" r="2.2" fill="currentColor"/>
+          <circle cx="18" cy="12" r="2.2" fill="currentColor"/>
+          <circle cx="12" cy="5" r="1.5" fill="currentColor" opacity=".7"/>
+          <circle cx="12" cy="19" r="1.5" fill="currentColor" opacity=".7"/>
+          <path d="M6 7 L18 12 M6 17 L18 12 M12 5 L18 12 M12 19 L18 12 M6 7 L12 5 M6 17 L12 19"
+                stroke="currentColor" stroke-width="1.4" opacity=".75"/>
+        </svg>
+      </div>
+      <h1 class="splash-title">
+        Neural Forge
+        <span>3 D  Visualizer</span>
+      </h1>
+      <p class="splash-subtitle">
+        Interactive 3D exploration of neural networks, CNNs, Transformers, and
+        the fundamental operations of deep learning — all in real time.
+      </p>
+      <div class="splash-features">
+        ${FEATURES.map(f => `
+          <div class="splash-feature">
+            <span class="splash-feature-dot" style="background:${f.color};color:${f.color};"></span>
+            <span>${f.label}</span>
+          </div>
+        `).join('')}
+      </div>
+      <button class="splash-btn" id="splash-enter">Launch →</button>
+    </div>
+  `;
+
+  document.body.appendChild(splash);
+
+  // ---- Animated neural-network canvas ----
+  const canvas = splash.querySelector('#splash-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function resizeSplashCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resizeSplashCanvas();
+  window.addEventListener('resize', resizeSplashCanvas);
+
+  // Build a random multi-layer network graph
+  const LAYERS = [3, 5, 7, 5, 3];
+  const nodes = [];
+  const edges = [];
+
+  function rebuildGraph() {
+    nodes.length = 0;
+    edges.length = 0;
+    const W = canvas.width, H = canvas.height;
+    const lGap = W / (LAYERS.length + 1);
+    LAYERS.forEach((count, li) => {
+      const x = lGap * (li + 1);
+      const vGap = H / (count + 1);
+      for (let ni = 0; ni < count; ni++) {
+        nodes.push({ x, y: vGap * (ni + 1), r: 5 + Math.random() * 4, phase: Math.random() * Math.PI * 2 });
+      }
+    });
+    // Edges: connect adjacent layers
+    let off = 0;
+    for (let li = 0; li < LAYERS.length - 1; li++) {
+      const nA = LAYERS[li], nB = LAYERS[li + 1];
+      const offA = off, offB = off + nA;
+      for (let a = 0; a < nA; a++) {
+        for (let b = 0; b < nB; b++) {
+          edges.push({
+            a: offA + a, b: offB + b,
+            progress: Math.random(),
+            speed: 0.002 + Math.random() * 0.003,
+            color: `hsl(${180 + Math.random() * 80}, 70%, 60%)`,
+          });
+        }
+      }
+      off += nA;
+    }
+  }
+  rebuildGraph();
+  window.addEventListener('resize', () => { resizeSplashCanvas(); rebuildGraph(); });
+
+  let raf = null;
+  let t = 0;
+
+  function drawSplash() {
+    raf = requestAnimationFrame(drawSplash);
+    t += 0.012;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Faint radial glow background
+    const grad = ctx.createRadialGradient(W / 2, H * 0.4, 0, W / 2, H * 0.4, Math.max(W, H) * 0.7);
+    grad.addColorStop(0, 'rgba(124,58,237,0.12)');
+    grad.addColorStop(0.5, 'rgba(45,212,191,0.04)');
+    grad.addColorStop(1, 'rgba(6,6,15,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw edges with animated pulses
+    edges.forEach(e => {
+      const A = nodes[e.a], B = nodes[e.b];
+      if (!A || !B) return;
+
+      // Static faint line
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(B.x, B.y);
+      ctx.strokeStyle = 'rgba(167,139,250,0.07)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Animated pulse traveling from A to B
+      e.progress = (e.progress + e.speed) % 1;
+      const px = A.x + (B.x - A.x) * e.progress;
+      const py = A.y + (B.y - A.y) * e.progress;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, 8);
+      g.addColorStop(0, e.color.replace('60%)', '80%)').replace('hsl', 'hsla').replace(')', ', 0.9)'));
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    });
+
+    // Draw nodes
+    nodes.forEach((n, idx) => {
+      const pulse = Math.sin(t * 1.8 + n.phase) * 0.25 + 0.75;
+      const r = n.r * pulse;
+      const hue = 200 + (idx % 5) * 30;
+      const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 2.5);
+      g.addColorStop(0, `hsla(${hue},80%,70%,${0.9 * pulse})`);
+      g.addColorStop(0.4, `hsla(${hue},70%,50%,${0.5 * pulse})`);
+      g.addColorStop(1, `hsla(${hue},70%,50%,0)`);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r * 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${hue},80%,75%,${0.95 * pulse})`;
+      ctx.fill();
+    });
+  }
+
+  drawSplash();
+
+  // Dismiss on click
+  splash.querySelector('#splash-enter').addEventListener('click', () => {
+    cancelAnimationFrame(raf);
+    splash.classList.add('hidden');
+    // Force a resize of the 3D scene after the splash fades out
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      splash.remove();
+    }, 700);
+  });
+}
+
+mountSplash();
+
+/* --------------------------------------------------------------------------
    Mount the app shell HTML.
    -------------------------------------------------------------------------- */
 const app = document.querySelector('#app');

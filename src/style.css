@@ -124,6 +124,163 @@ body::before {
 ::-webkit-scrollbar-thumb:hover { background: rgba(167,139,250,.32); }
 
 /* =====================================================================
+   SPLASH / LANDING PAGE
+   ===================================================================== */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #06060f;
+  transition: opacity .65s cubic-bezier(.4,0,.2,1), visibility .65s;
+}
+.splash.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.splash-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.splash-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 620px;
+  padding: 40px 32px;
+  gap: 20px;
+  animation: splashFadeUp .9s cubic-bezier(.2,.8,.3,1) both .3s;
+}
+@keyframes splashFadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.splash-logo {
+  width: 72px; height: 72px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 30% 30%, var(--brand-teal) 0%, transparent 55%),
+    linear-gradient(135deg, var(--brand-purple) 0%, var(--brand-purple-3) 100%);
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 48px rgba(45,212,191,.45),
+    0 0 80px rgba(124,58,237,.35),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  animation: logoFloat 4s ease-in-out infinite;
+}
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-6px) scale(1.02); }
+}
+.splash-logo svg { width: 36px; height: 36px; color: #fff; filter: drop-shadow(0 0 8px rgba(45,212,191,0.8)); }
+
+.splash-title {
+  font-family: 'Sora', 'Inter', sans-serif;
+  font-size: clamp(36px, 6vw, 60px);
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 0%, var(--brand-teal-2) 50%, var(--brand-purple-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.splash-title span {
+  display: block;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-top: 4px;
+}
+.splash-subtitle {
+  font-size: 16px;
+  color: var(--text-2);
+  line-height: 1.65;
+  max-width: 480px;
+  margin: 0;
+}
+
+.splash-features {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+.splash-feature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  backdrop-filter: blur(10px);
+  transition: all .2s;
+}
+.splash-feature:hover {
+  border-color: var(--border-glow);
+  color: var(--text);
+  background: var(--panel-hover);
+}
+.splash-feature-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.splash-btn {
+  margin-top: 10px;
+  padding: 16px 52px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Sora', 'Inter', sans-serif;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-purple) 0%, var(--brand-teal) 100%);
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all .25s cubic-bezier(.2,.8,.3,1);
+  box-shadow:
+    0 0 0 1px rgba(45,212,191,.4),
+    0 8px 32px rgba(45,212,191,.3),
+    0 16px 48px rgba(124,58,237,.25);
+}
+.splash-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,.15) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform .55s ease;
+}
+.splash-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 0 0 1px rgba(45,212,191,.6), 0 12px 40px rgba(45,212,191,.45), 0 24px 60px rgba(124,58,237,.35); }
+.splash-btn:hover::before { transform: translateX(100%); }
+.splash-btn:active { transform: translateY(0) scale(0.99); }
+
+/* =====================================================================
    APP SHELL
    ===================================================================== */
 #app {
