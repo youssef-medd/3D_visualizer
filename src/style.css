@@ -857,6 +857,8 @@ body::before {
   position: absolute;
   top: 84px; left: 16px;
   width: 340px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
   padding: 18px;
   background: var(--panel-strong);
   backdrop-filter: blur(22px) saturate(140%);
@@ -897,9 +899,12 @@ body::before {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12.5px;
+  font-size: 11px;
   color: var(--brand-teal);
-  text-align: center;
+  text-align: left;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.7;
 }
 .theory-overlay .equation small {
   display: block;

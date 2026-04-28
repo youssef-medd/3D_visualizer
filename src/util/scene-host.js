@@ -27,7 +27,6 @@ export class SceneHost {
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true,
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -125,6 +124,10 @@ export class SceneHost {
       next.onActivate(this);
     }
     this._resize();
+    // Deferred resize to handle first-paint scenarios where the canvas
+    // has no dimensions yet when the DOM is freshly laid out.
+    requestAnimationFrame(() => this._resize());
+    setTimeout(() => this._resize(), 80);
   }
 
   _rebuildComposer() {
