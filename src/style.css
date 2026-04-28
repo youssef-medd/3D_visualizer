@@ -451,6 +451,14 @@ body::before {
 }
 .btn-icon svg { width: 14px; height: 14px; }
 
+/* Compact variant — used in the layer-panel action row */
+.btn-compact {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  gap: 5px;
+}
+.btn-compact svg { width: 12px; height: 12px; }
+
 .btn-row {
   display: flex;
   gap: 6px;

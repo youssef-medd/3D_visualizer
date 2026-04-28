@@ -683,8 +683,8 @@ function renderArchSidebarRight() {
     <div class="section">
       <div class="section-title">${iconHTML('layers')}<span>Layers</span></div>
       <div class="btn-row" style="margin-bottom:10px;">
-        <button class="btn btn-primary" id="btn-add-layer">${iconHTML('add')}<span>Add Layer</span></button>
-        <button class="btn btn-danger" id="btn-clear-layers" title="Clear all">${iconHTML('trash')}</button>
+        <button class="btn btn-primary btn-compact" id="btn-add-layer">${iconHTML('add')}<span>Add Layer</span></button>
+        <button class="btn btn-danger btn-compact btn-icon" id="btn-clear-layers" title="Clear all">${iconHTML('trash')}</button>
       </div>
       <div id="layer-list"></div>
     </div>
