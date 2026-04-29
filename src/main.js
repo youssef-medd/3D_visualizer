@@ -7,6 +7,7 @@ import { AttentionScene } from './scenes/attention-scene.js';
 import { GradientDescentScene } from './scenes/gradient-descent-scene.js';
 import { PoolingScene } from './scenes/pooling-scene.js';
 import { PipelineScene } from './scenes/pipeline-scene.js';
+import { RAGScene } from './scenes/rag-scene.js';
 import { StyleManager } from './util/style-manager.js';
 
 import {
@@ -38,7 +39,7 @@ import { iconHTML } from './ui/icons.js';
    ========================================================================== */
 
 const ARCH_TABS = ['nn', 'cnn', 'transformer'];
-const THEORY_TABS = ['convolution', 'pooling', 'attention', 'gradientDescent', 'pipeline'];
+const THEORY_TABS = ['convolution', 'pooling', 'attention', 'gradientDescent', 'pipeline', 'rag'];
 
 const TAB_LABELS = {
   nn: 'Neural Net',
@@ -49,6 +50,7 @@ const TAB_LABELS = {
   attention: 'Attention',
   gradientDescent: 'Gradient Descent',
   pipeline: 'ML Pipeline',
+  rag: 'RAG',
 };
 
 const TAB_SUBLABEL = {
@@ -60,6 +62,7 @@ const TAB_SUBLABEL = {
   attention: 'Q · K · V dot products',
   gradientDescent: 'Loss landscapes',
   pipeline: 'NN → Loss → CNN chain',
+  rag: 'Chunk · Embed · Retrieve',
 };
 
 const LAYER_CSS_VAR = {
@@ -105,6 +108,7 @@ const state = {
     attention:   { seqLen: 6, animate: true, speed: 1.0, showNumbers: true },
     gradientDescent: { learningRate: 0.05, animate: true, speed: 1.0, showNumbers: true },
     pipeline: { animate: true, speed: 1.0, showNumbers: true },
+    rag:      { animate: true, speed: 1.0, showNumbers: true },
   },
 };
 
@@ -162,7 +166,7 @@ function mountSplash() {
   const PILLS = [
     'Neural Net', 'CNN', 'Transformer',
     'Convolution', 'Pooling', 'Attention',
-    'Gradient Descent', 'ML Pipeline',
+    'Gradient Descent', 'ML Pipeline', 'RAG',
   ];
 
   splash.innerHTML = `
@@ -481,6 +485,7 @@ const attnScene = new AttentionScene();
 const gradScene = new GradientDescentScene();
 const poolScene = new PoolingScene();
 const pipeScene = new PipelineScene();
+const ragScene  = new RAGScene();
 
 sceneHost.register('architecture', archScene);
 sceneHost.register('convolution', convScene);
@@ -488,6 +493,7 @@ sceneHost.register('attention', attnScene);
 sceneHost.register('gradientDescent', gradScene);
 sceneHost.register('pooling', poolScene);
 sceneHost.register('pipeline', pipeScene);
+sceneHost.register('rag', ragScene);
 
 // React to global style changes that affect the renderer (bloom, etc.)
 style.subscribe((s, partial) => {
@@ -529,6 +535,7 @@ function switchTab(tab) {
     else if (tab === 'gradientDescent') gradScene.setOptions(opts);
     else if (tab === 'pooling') poolScene.setOptions(opts);
     else if (tab === 'pipeline') pipeScene.setOptions(opts);
+    else if (tab === 'rag')      ragScene.setOptions(opts);
     sceneHost.activate(tab);
   }
 
@@ -1302,6 +1309,25 @@ function renderTheorySidebarLeft() {
         <div class="insight">Right: CNN layers (Conv → Pool → FC). Gradient arrows flow backwards — that's backpropagation updating weights.</div>
       </div>
     `;
+  } else if (tab === 'rag') {
+    const o = state.theory.rag;
+    left.innerHTML = `
+      <div class="section">
+        <div class="section-title">${iconHTML('controls')}<span>RAG Controls</span></div>
+        <div class="card">
+          ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'rag')}
+          ${theoryToggle('Animate', 'animate', o.animate, 'rag')}
+          ${theoryToggle('Show labels', 'showNumbers', o.showNumbers, 'rag')}
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('insight')}<span>What to look for</span></div>
+        <div class="insight">Coloured flow dots travel left→right: each represents a data packet moving through the pipeline stage.</div>
+        <div class="insight">The 4 chunk colours persist from splitting all the way into the vector store — each row is one chunk's vectors.</div>
+        <div class="insight">The point cloud (Embedding Space) shows 4 distinct clusters — semantically similar chunks end up close together in high-dim space.</div>
+        <div class="insight">The query sphere (cyan) represents a user question vectorised by the same embedding model. Nearest neighbours in the DB are the retrieved context.</div>
+      </div>
+    `;
   }
 
   // Wire theory range/toggle inputs
@@ -1359,6 +1385,7 @@ function applyTheoryOptions(tab) {
   else if (tab === 'gradientDescent') gradScene.setOptions(o);
   else if (tab === 'pooling') poolScene.setOptions(o);
   else if (tab === 'pipeline') pipeScene.setOptions(o);
+  else if (tab === 'rag')      ragScene.setOptions(o);
 }
 
 function renderTheorySidebarRight() {
@@ -1515,6 +1542,41 @@ function renderTheorySidebarRight() {
         <div class="theory-eq">Loss:     L = &ell;(&ycirc;, y)</div>
         <div class="theory-eq">Backward: &nabla;&theta; = &part;L / &part;&theta;</div>
         <div class="theory-eq">Update:   &theta; &larr; &theta; &minus; &eta; &nabla;&theta;</div>
+      </div>
+    `;
+  } else if (state.activeTab === 'rag') {
+    right.innerHTML = `
+      <div class="section">
+        <div class="section-title">${iconHTML('brain')}<span>Concept</span></div>
+        <div class="card">
+          <div class="card-title">Retrieval-Augmented Generation</div>
+          <p style="color:var(--text-2);font-size:13px;line-height:1.6;margin:0 0 10px;">
+            RAG grounds an LLM in external knowledge without fine-tuning. A document is split into
+            <strong style="color:var(--text);">chunks</strong>, each chunk is converted to a dense vector
+            by an <strong style="color:var(--text);">embedding model</strong>, and all vectors are stored
+            in a <strong style="color:var(--text);">vector database</strong>.
+          </p>
+          <p style="color:var(--text-2);font-size:13px;line-height:1.6;margin:0;">
+            At query time, the user question is embedded with the same model, then a
+            <strong style="color:var(--text);">nearest-neighbour search</strong> retrieves the top-K
+            most semantically similar chunks. Those chunks are injected into the LLM prompt as context
+            — giving the model precise, up-to-date facts it would otherwise hallucinate.
+          </p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('insight')}<span>Why it matters</span></div>
+        <div class="insight">RAG separates <em>knowledge</em> (the DB) from <em>reasoning</em> (the LLM) — you can update facts by re-indexing without retraining.</div>
+        <div class="insight">Vector similarity search is sub-linear with HNSW / IVF indexes (Pinecone, pgvector, FAISS) — millions of vectors at &lt;100 ms.</div>
+        <div class="insight">Chunk size and overlap are the biggest quality levers: too large dilutes relevance, too small loses context.</div>
+        <div class="insight">Hybrid search (dense + sparse BM25) often outperforms pure dense retrieval for keyword-heavy queries.</div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">sim(q, d) = cos(&theta;) = (q &middot; d) / (|q| |d|)</div>
+        <div class="theory-eq">TopK = argsort<sub>d &isin; DB</sub> sim(q, d) [0:K]</div>
+        <div class="theory-eq">answer = LLM(prompt + concat(chunk<sub>i</sub> for i in TopK))</div>
+        <div class="theory-eq">embed: chunk &rarr; &Ropf;<sup>768</sup>  via SentenceTransformer</div>
       </div>
     `;
   }
