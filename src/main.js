@@ -226,12 +226,12 @@ function mountSplash() {
   const canvas = document.getElementById('splash-canvas-3d');
   const ctx = canvas.getContext('2d');
 
-  const resize3D = () => {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-  };
-  resize3D();
-  window.addEventListener('resize', resize3D);
+  // Size canvas once immediately; defer subsequent resizes to the draw loop
+  // so the clear and redraw always happen in the same frame (no blank flash).
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  let _pendingResize = false;
+  window.addEventListener('resize', () => { _pendingResize = true; });
 
   // Build 3D node positions: layers of neurons
   const NET_LAYERS = [4, 7, 9, 9, 7, 4];
@@ -297,6 +297,15 @@ function mountSplash() {
 
   function draw3D() {
     rafId = requestAnimationFrame(draw3D);
+
+    // Apply any pending resize at the top of the frame — resize + clear happen
+    // together so there is never a blank frame between the two operations.
+    if (_pendingResize) {
+      _pendingResize = false;
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
     t3d  += 0.007;
     rotY += 0.0028;
 
