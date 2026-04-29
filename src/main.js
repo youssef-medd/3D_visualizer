@@ -123,6 +123,10 @@ function mountCursor() {
   document.body.appendChild(ring);
   document.body.appendChild(dot);
 
+  // Anchor at origin — all movement via transform (GPU composited, no layout)
+  ring.style.left = '0px'; ring.style.top = '0px';
+  dot.style.left  = '0px'; dot.style.top  = '0px';
+
   let mx = -100, my = -100;
   let rx = -100, ry = -100;
 
@@ -133,10 +137,8 @@ function mountCursor() {
     requestAnimationFrame(tickCursor);
     rx += (mx - rx) * 0.14;
     ry += (my - ry) * 0.14;
-    ring.style.left = rx + 'px';
-    ring.style.top  = ry + 'px';
-    dot.style.left  = mx + 'px';
-    dot.style.top   = my + 'px';
+    ring.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+    dot.style.transform  = `translate(${mx}px,${my}px) translate(-50%,-50%)`;
   }
   tickCursor();
 
@@ -294,25 +296,29 @@ function mountSplash() {
   let rotY = 0;
   let t3d  = 0;
   let rafId;
+  let _drawFrame = 0;
 
   function draw3D() {
     rafId = requestAnimationFrame(draw3D);
 
-    // Apply any pending resize at the top of the frame — resize + clear happen
-    // together so there is never a blank frame between the two operations.
+    // Apply pending resize at the top of the frame so clear + redraw are atomic.
     if (_pendingResize) {
       _pendingResize = false;
       canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
     }
 
-    t3d  += 0.007;
-    rotY += 0.0028;
+    // Throttle to ~30 fps — halves canvas work without visible jank.
+    if (++_drawFrame % 2 !== 0) return;
+
+    // Double the per-frame step to keep the same visual speed at half frequency.
+    t3d  += 0.014;
+    rotY += 0.0056;
 
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Two-tone ambient glow — green center fading to deep indigo edge
+    // Two-tone ambient glow (two gradients, drawn once per frame — unavoidable)
     const gBg = ctx.createRadialGradient(W / 2, H / 2 - 40, 0, W / 2, H / 2 - 40, Math.min(W, H) * 0.62);
     gBg.addColorStop(0,    'rgba(0,234,100,0.07)');
     gBg.addColorStop(0.45, 'rgba(60,30,180,0.06)');
@@ -320,7 +326,6 @@ function mountSplash() {
     ctx.fillStyle = gBg;
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle vignette so edges stay dark and text is readable
     const gVig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W,H) * 0.3, W / 2, H / 2, Math.min(W,H) * 0.85);
     gVig.addColorStop(0, 'rgba(2,2,8,0)');
     gVig.addColorStop(1, 'rgba(2,2,8,0.55)');
@@ -330,20 +335,15 @@ function mountSplash() {
     // Project all nodes
     const projected = nodes3d.map(n => project3d(n.x, n.y, n.z, rotY, W, H));
 
-    // Sort by depth (back-to-front)
-    const sortedEdges = [...edges3d].sort((ea, eb) => {
-      const dA = (projected[ea.a].depth + projected[ea.b].depth) / 2;
-      const dB = (projected[eb.a].depth + projected[eb.b].depth) / 2;
-      return dA - dB;
-    });
-
-    // Draw edges
-    sortedEdges.forEach(e => {
+    // Draw edges — no depth sort (saves O(n log n) every frame)
+    for (let ei = 0; ei < edges3d.length; ei++) {
+      const e = edges3d[ei];
       const pA = projected[e.a], pB = projected[e.b];
       const avgDepth = (pA.depth + pB.depth) / 2;
-      const alpha = Math.max(0, avgDepth * 0.18 - 0.02);
+      e.progress = (e.progress + e.speed * 2) % 1; // *2 because we run at 30fps
+      if (avgDepth <= 0) continue;
 
-      // Static edge line
+      const alpha = Math.max(0, avgDepth * 0.18 - 0.02);
       ctx.beginPath();
       ctx.moveTo(pA.sx, pA.sy);
       ctx.lineTo(pB.sx, pB.sy);
@@ -351,56 +351,44 @@ function mountSplash() {
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
-      // Traveling pulse — skip if edge is behind the projection plane (depth ≤ 0)
-      // to avoid createRadialGradient throwing with a non-positive outer radius.
-      e.progress = (e.progress + e.speed) % 1;
-      const pulseR = 3 * avgDepth;
-      if (pulseR > 0) {
-        const px = pA.sx + (pB.sx - pA.sx) * e.progress;
-        const py = pA.sy + (pB.sy - pA.sy) * e.progress;
-        const gPulse = ctx.createRadialGradient(px, py, 0, px, py, pulseR * 3);
-        gPulse.addColorStop(0, `rgba(0,234,100,${avgDepth * 0.85})`);
-        gPulse.addColorStop(1, 'rgba(0,234,100,0)');
-        ctx.beginPath();
-        ctx.arc(px, py, pulseR * 3, 0, Math.PI * 2);
-        ctx.fillStyle = gPulse;
-        ctx.fill();
-      }
-    });
-
-    // Draw nodes (sorted back-to-front)
-    const sortedNodes = nodes3d
-      .map((n, i) => ({ n, p: projected[i], i }))
-      .sort((a, b) => a.p.depth - b.p.depth);
-
-    sortedNodes.forEach(({ n, p }) => {
-      if (p.depth <= 0) return; // node is behind projection plane — skip
-      const pulse = Math.sin(t3d * 2.2 + n.phase) * 0.22 + 0.78;
-      const r = n.r * p.scale * 2.2 * pulse;
-      const brightness = 35 + p.depth * 45;
-      const alpha = 0.4 + p.depth * 0.6;
-
-      // Outer glow
-      const gNode = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 3.5);
-      gNode.addColorStop(0, `hsla(${n.hue},90%,${brightness}%,${alpha * pulse * 0.7})`);
-      gNode.addColorStop(1, `hsla(${n.hue},90%,${brightness}%,0)`);
+      // Traveling pulse as a plain filled circle — no createRadialGradient
+      const px = pA.sx + (pB.sx - pA.sx) * e.progress;
+      const py = pA.sy + (pB.sy - pA.sy) * e.progress;
       ctx.beginPath();
-      ctx.arc(p.sx, p.sy, r * 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = gNode;
+      ctx.arc(px, py, Math.min(avgDepth * 6, 3.5), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,234,100,${avgDepth * 0.75})`;
+      ctx.fill();
+    }
+
+    // Draw nodes — no depth sort, no per-node createRadialGradient
+    for (let ni = 0; ni < nodes3d.length; ni++) {
+      const n = nodes3d[ni];
+      const p = projected[ni];
+      if (p.depth <= 0) continue;
+
+      const pulse = Math.sin(t3d * 2.2 + n.phase) * 0.22 + 0.78;
+      const r     = n.r * p.scale * 2.2 * pulse;
+      const brightness = 35 + p.depth * 45;
+      const alpha      = 0.4 + p.depth * 0.6;
+
+      // Soft glow — one larger semi-transparent circle (no gradient object)
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r * 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${n.hue},90%,${brightness}%,${(alpha * pulse * 0.18).toFixed(3)})`;
       ctx.fill();
 
       // Core
       ctx.beginPath();
       ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${n.hue},100%,${Math.min(80, brightness + 20)}%,${alpha})`;
+      ctx.fillStyle = `hsla(${n.hue},100%,${Math.min(80, brightness + 20)}%,${alpha.toFixed(3)})`;
       ctx.fill();
 
       // Specular highlight
       ctx.beginPath();
       ctx.arc(p.sx - r * 0.25, p.sy - r * 0.25, r * 0.3, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${0.4 * p.depth})`;
+      ctx.fillStyle = `rgba(255,255,255,${(0.4 * p.depth).toFixed(3)})`;
       ctx.fill();
-    });
+    }
   }
 
   draw3D();
