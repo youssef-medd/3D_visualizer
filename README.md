@@ -4,6 +4,11 @@
 
 **Live, real-time 3D in your browser. No install. No Python. No math degree required.**
 
+[![Live Demo](https://img.shields.io/badge/demo-live-00ea64?style=flat-square&logo=googlechrome&logoColor=white)](https://youssef-medd.github.io/3D_visualizer/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Built with Three.js](https://img.shields.io/badge/built%20with-Three.js-black?style=flat-square&logo=threedotjs)](https://threejs.org)
+[![Bundled with Vite](https://img.shields.io/badge/bundled%20with-Vite-646cff?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
+
 ---
 
 ## What is this?
@@ -15,6 +20,12 @@ Everything runs in Three.js inside a single browser tab. Drag sliders, watch geo
 ---
 
 ## Sections at a glance
+
+### Splash / Landing
+
+An animated 3D network graph greets you on load — nodes and edges auto-rotate in WebGL with GPU-accelerated rendering at a smooth 30 fps. Click anywhere to enter the studio.
+
+---
 
 ### Architecture Builder (interactive)
 
