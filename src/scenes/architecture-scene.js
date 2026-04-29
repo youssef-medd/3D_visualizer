@@ -329,9 +329,13 @@ export class ArchitectureScene {
         lh = lh * s.lengthSizeScaling;
       }
 
-      // Layer position — spaced along chosen axis, slabs face camera (+Z)
+      // Layer position — for CNN use a diagonal cascade (X + Z) so each
+      // feature-map face is clearly visible in perspective (face-to-face view).
       let x = 0, y = 0, z = 0;
-      if (direction === 'horizontal') {
+      if (this.opts.mode === 'cnn') {
+        x = startAxis + idx * spacing;
+        z = -(idx * spacing * 0.58);
+      } else if (direction === 'horizontal') {
         x = startAxis + idx * spacing;
       } else {
         y = -(startAxis + idx * spacing);
@@ -595,14 +599,20 @@ export class ArchitectureScene {
   }
 
   _frame(layerCount) {
-    // Camera positioned so all layers fit and we're looking down the row.
     const dist = Math.max(20, 14 + layerCount * 1.8);
-    if (this.style.get('direction') === 'vertical') {
+    if (this.opts.mode === 'cnn') {
+      // Elevated front-left angle: see the cascade of feature-map faces
+      const spacing = this.style.state.layerSpacing;
+      const midZ = -((layerCount - 1) * spacing * 0.29);
+      this.camera.position.set(-dist * 0.05, 7, midZ + dist * 0.92);
+      this.camera.lookAt(0, 1, midZ);
+    } else if (this.style.get('direction') === 'vertical') {
       this.camera.position.set(0, 0, dist);
+      this.camera.lookAt(0, 0, 0);
     } else {
       this.camera.position.set(dist * 0.18, 4, dist);
+      this.camera.lookAt(0, 0, 0);
     }
-    this.camera.lookAt(0, 0, 0);
   }
 
   /**
@@ -646,10 +656,13 @@ export class ArchitectureScene {
     if (this.style.get('autoOrbit')) {
       this._spin += dt * 0.18;
       const r = Math.max(20, 14 + this._layers.length * 1.8);
+      const spacing = this.style.state.layerSpacing;
+      const midZ = this.opts.mode === 'cnn'
+        ? -((this._layers.length - 1) * spacing * 0.29) : 0;
       this.camera.position.x = Math.sin(this._spin) * r * 0.35;
-      this.camera.position.z = Math.cos(this._spin) * r;
+      this.camera.position.z = midZ + Math.cos(this._spin) * r;
       this.camera.position.y = 4 + Math.sin(this._spin * 0.7) * 1.5;
-      this.camera.lookAt(0, 0, 0);
+      this.camera.lookAt(0, 0, midZ);
     }
   }
 
