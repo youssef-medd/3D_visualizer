@@ -22,18 +22,18 @@ export const layerColors = {
   head:       '#fb7185',
 };
 
-// Brand palette
+// Brand palette — HackerRank-inspired dark green
 export const brand = {
-  primary: '#7c3aed',  // royal purple
-  primary2: '#3b1d6e', // deep indigo
-  accent:   '#2dd4bf', // teal (Quantexa-style)
-  accent2:  '#67e8f9', // cyan secondary
+  primary:  '#00ea64', // vibrant green (main accent)
+  primary2: '#00b84e', // deeper green
+  accent:   '#00ea64', // same green
+  accent2:  '#22d3ee', // cyan secondary
   accent3:  '#f472b6', // pink
   warn:     '#fbbf24',
   err:      '#f87171',
-  bg0:      '#06060f',
-  bg1:      '#0c0a1a',
-  bg2:      '#161029',
+  bg0:      '#060608',
+  bg1:      '#0a0a0e',
+  bg2:      '#101014',
 };
 
 export const accent     = brand.accent;

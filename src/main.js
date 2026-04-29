@@ -299,11 +299,11 @@ function mountSplash() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Two-tone ambient glow — teal center fading to deep indigo edge
+    // Two-tone ambient glow — green center fading to deep indigo edge
     const gBg = ctx.createRadialGradient(W / 2, H / 2 - 40, 0, W / 2, H / 2 - 40, Math.min(W, H) * 0.62);
-    gBg.addColorStop(0,    'rgba(0,200,160,0.08)');
-    gBg.addColorStop(0.45, 'rgba(80,40,200,0.07)');
-    gBg.addColorStop(1,    'rgba(2,2,8,0)');
+    gBg.addColorStop(0,    'rgba(0,234,100,0.07)');
+    gBg.addColorStop(0.45, 'rgba(60,30,180,0.06)');
+    gBg.addColorStop(1,    'rgba(6,6,8,0)');
     ctx.fillStyle = gBg;
     ctx.fillRect(0, 0, W, H);
 
@@ -334,7 +334,7 @@ function mountSplash() {
       ctx.beginPath();
       ctx.moveTo(pA.sx, pA.sy);
       ctx.lineTo(pB.sx, pB.sy);
-      ctx.strokeStyle = `rgba(0,255,209,${alpha})`;
+      ctx.strokeStyle = `rgba(0,234,100,${alpha})`;
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
@@ -344,8 +344,8 @@ function mountSplash() {
       const py = pA.sy + (pB.sy - pA.sy) * e.progress;
       const pulseR = 3 * avgDepth;
       const gPulse = ctx.createRadialGradient(px, py, 0, px, py, pulseR * 3);
-      gPulse.addColorStop(0, `rgba(0,255,209,${avgDepth * 0.85})`);
-      gPulse.addColorStop(1, 'rgba(0,255,209,0)');
+      gPulse.addColorStop(0, `rgba(0,234,100,${avgDepth * 0.85})`);
+      gPulse.addColorStop(1, 'rgba(0,234,100,0)');
       ctx.beginPath();
       ctx.arc(px, py, pulseR * 3, 0, Math.PI * 2);
       ctx.fillStyle = gPulse;
