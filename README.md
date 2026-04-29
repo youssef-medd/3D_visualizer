@@ -84,6 +84,12 @@ Nearest neighbours by cosine = most semantically relevant chunks.
 
 ## Getting started
 
+**Live demo:** https://youssef-medd.github.io/3D_visualizer/
+
+No install needed — open the link and it runs instantly in your browser.
+
+### For contributors (local dev)
+
 ```bash
 git clone https://github.com/youssef-medd/3D_visualizer
 cd neural-forge-3d
@@ -94,6 +100,7 @@ npm run dev      # -> http://localhost:5173
 ```bash
 npm run build    # production bundle -> /dist
 npm run preview  # preview the build locally
+npm run deploy   # build + push to GitHub Pages
 ```
 
 **Requirements:** Node 18+, any modern browser (Chrome / Firefox / Edge).
