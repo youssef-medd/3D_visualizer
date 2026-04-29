@@ -4,22 +4,19 @@ import { setupLights, addGroundGrid, makeTextSprite, clearGroup } from '../util/
 /**
  * RAGScene — Retrieval-Augmented Generation pipeline
  *
- * Left-to-right pipeline with 5 stages:
+ * Six-stage left-to-right pipeline:
+ *   Document → Chunks → Embedding Space → Vector DB → Query/Retrieve → LLM
  *
- *  [Document]  →  [Chunks]  →  [Embedding Space]  →  [Vector DB]  →  [Query/Retrieve]  →  [LLM]
- *
- * Stage 1 — Document: a glowing book slab that "splits" into chunks.
- * Stage 2 — Chunks: 4 coloured text-block slabs, each a semantic segment.
- * Stage 3 — Embedding Space: 3D point cloud, 4 colour-coded clusters.
- *            Represents a projected view of the high-dimensional vector space.
- * Stage 4 — Vector Store: a grid of glowing cells, rows per chunk colour.
- *            Represents indexed vectors in a DB like Pinecone / pgvector.
- * Stage 5 — Query + Retrieve: a cyan sphere (the query embedding) with
- *            animated rings. Highlight beam finds nearest neighbours in the DB.
- * Stage 6 — LLM + Answer: the final green box — context-augmented generation.
- *
- * Animated flow dots travel between stages showing data movement.
+ * Fully customisable:
+ *   numChunks   — 2-6 colour-coded segments the document is split into
+ *   topK        — how many chunks are retrieved (highlighted in the DB)
+ *   showSimilarity — cosine score labels next to retrieved rows
+ *   embDim      — embedding dimension shown in the embedding-space label
+ *   animate / speed / showNumbers — standard controls
  */
+
+const ALL_CHUNK_COLORS = ['#ec4899', '#a78bfa', '#22d3ee', '#fbbf24', '#fb923c', '#a3e635'];
+
 export class RAGScene {
   constructor() {
     this.scene = new THREE.Scene();
@@ -39,31 +36,49 @@ export class RAGScene {
       animate: true,
       speed: 1.0,
       showNumbers: true,
+      numChunks: 4,
+      topK: 2,
+      showSimilarity: true,
+      embDim: 768,
     };
 
-    this._flowDots  = [];
-    this._embPoints = [];
-    this._dbCells   = [];
+    this._flowDots    = [];
+    this._embPoints   = [];
+    this._dbCells     = [];
+    this._dbCols      = 6;
     this._chunkMeshes = [];
-    this._labels    = [];
+    this._labels      = [];
+    this._simLabels   = [];
 
     this._build();
   }
 
   setOptions(partial) {
+    const rebuildKeys = new Set(['numChunks', 'embDim']);
+    const needsRebuild = Object.keys(partial).some(k => rebuildKeys.has(k));
     Object.assign(this.opts, partial);
-    if ('showNumbers' in partial) this._applyLabelVisibility();
+
+    if (needsRebuild) {
+      this._build();
+    } else {
+      if ('showNumbers' in partial) this._applyLabelVisibility();
+      if ('topK' in partial || 'showSimilarity' in partial) {
+        this._applyTopK();
+        this._buildSimilarityLabels();
+      }
+    }
   }
 
   // ------------------------------------------------------------------ build
 
   _build() {
     clearGroup(this.root);
-    this._flowDots  = [];
-    this._embPoints = [];
-    this._dbCells   = [];
+    this._flowDots    = [];
+    this._embPoints   = [];
+    this._dbCells     = [];
     this._chunkMeshes = [];
-    this._labels    = [];
+    this._labels      = [];
+    this._simLabels   = [];
 
     this._buildDocument();
     this._buildChunks();
@@ -73,6 +88,7 @@ export class RAGScene {
     this._buildLLM();
     this._buildFlowConnectors();
     this._buildPipelineLabel();
+    this._buildSimilarityLabels();
   }
 
   // ------------------------------------------------------------------ stage 1 — document
@@ -97,18 +113,18 @@ export class RAGScene {
     );
     g.add(edges);
 
-    // Faint text lines
     for (let i = 0; i < 8; i++) {
       const lw = 0.5 + Math.random() * 1.4;
-      const lm = new THREE.MeshBasicMaterial({ color: '#cbd5e1', transparent: true, opacity: 0.45 });
-      const lmesh = new THREE.Mesh(new THREE.PlaneGeometry(lw, 0.075), lm);
+      const lmesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(lw, 0.075),
+        new THREE.MeshBasicMaterial({ color: '#cbd5e1', transparent: true, opacity: 0.45 }),
+      );
       lmesh.position.set(-0.6 + lw / 2 - 1.3, 1.55 - i * 0.42, 0.24);
       g.add(lmesh);
     }
 
     const ringGeo = new THREE.TorusGeometry(2.6, 0.035, 8, 48);
-    const ringMat = new THREE.MeshBasicMaterial({ color: '#94a3b8', transparent: true, opacity: 0.18 });
-    this._docRing = new THREE.Mesh(ringGeo, ringMat);
+    this._docRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#94a3b8', transparent: true, opacity: 0.18 }));
     this._docRing.rotation.x = Math.PI / 2;
     g.add(this._docRing);
 
@@ -127,15 +143,18 @@ export class RAGScene {
   // ------------------------------------------------------------------ stage 2 — chunks
 
   _buildChunks() {
-    const COLORS = ['#ec4899', '#a78bfa', '#22d3ee', '#fbbf24'];
+    const n = Math.max(2, Math.min(6, this.opts.numChunks));
+    const COLORS = ALL_CHUNK_COLORS.slice(0, n);
     const g = new THREE.Group();
     g.position.set(-9, 0, 0);
     this.root.add(g);
     this._chunkMeshes = [];
 
+    const totalH = (n - 1) * 2.1;
+
     COLORS.forEach((col, i) => {
-      const y = (i - 1.5) * 2.2;
-      const geo = new THREE.BoxGeometry(2.6, 1.35, 0.42);
+      const y = (i - (n - 1) / 2) * 2.1;
+      const geo = new THREE.BoxGeometry(2.6, 1.3, 0.42);
       const mat = new THREE.MeshPhysicalMaterial({
         color: col, emissive: col, emissiveIntensity: 0.3,
         transparent: true, opacity: 0.8,
@@ -156,20 +175,28 @@ export class RAGScene {
 
       for (let j = 0; j < 3; j++) {
         const lw = 0.4 + Math.random() * 1.5;
-        const lm = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.38 });
-        const lmesh = new THREE.Mesh(new THREE.PlaneGeometry(lw, 0.065), lm);
-        lmesh.position.set(-0.65 + lw / 2 - 1.3, y - 0.28 + j * 0.26, 0.22);
+        const lmesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(lw, 0.065),
+          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.38 }),
+        );
+        lmesh.position.set(-0.65 + lw / 2 - 1.3, y - 0.25 + j * 0.24, 0.22);
         g.add(lmesh);
       }
+
+      // chunk index label on each slab
+      const numLbl = makeTextSprite(`C${i + 1}`, { fontSize: 18, color: col });
+      numLbl.position.set(1.6, y, 0.3);
+      numLbl.visible = this.opts.showNumbers;
+      g.add(numLbl);
     });
 
-    const lbl = makeTextSprite('Chunks', { fontSize: 24, color: '#c4b5fd' });
-    lbl.position.set(0, 4.1, 0);
+    const lbl = makeTextSprite(`Chunks  (n=${n})`, { fontSize: 24, color: '#c4b5fd' });
+    lbl.position.set(0, totalH / 2 + 1.5, 0);
     g.add(lbl);
     this._labels.push(lbl);
 
     const sub = makeTextSprite('text splitting → overlap', { fontSize: 17, color: '#6d28d9' });
-    sub.position.set(0, -3.9, 0);
+    sub.position.set(0, -totalH / 2 - 1.4, 0);
     sub.visible = this.opts.showNumbers;
     this._chunkSub = sub;
     g.add(sub);
@@ -178,22 +205,28 @@ export class RAGScene {
   // ------------------------------------------------------------------ stage 3 — embedding space
 
   _buildEmbeddingSpace() {
+    const n = Math.max(2, Math.min(6, this.opts.numChunks));
+    const COLORS = ALL_CHUNK_COLORS.slice(0, n);
     const g = new THREE.Group();
     g.position.set(0, 0, 0);
     this.root.add(g);
 
-    const COLORS = ['#ec4899', '#a78bfa', '#22d3ee', '#fbbf24'];
-    const centers = [
-      new THREE.Vector3(-1.4, 1.6, -0.8),
-      new THREE.Vector3(1.6, 1.4, 0.9),
-      new THREE.Vector3(-1.6, -1.4, 0.9),
-      new THREE.Vector3(1.4, -1.6, -0.8),
-    ];
+    // n cluster centers, spread evenly
+    const centers = [];
+    for (let ci = 0; ci < n; ci++) {
+      const angle = (ci / n) * Math.PI * 2;
+      centers.push(new THREE.Vector3(
+        Math.cos(angle) * 1.8,
+        Math.sin(angle) * 1.4,
+        (Math.random() - 0.5) * 1.6,
+      ));
+    }
 
     this._embPoints = [];
     COLORS.forEach((col, ci) => {
       const center = centers[ci];
-      for (let k = 0; k < 9; k++) {
+      const count = 7 + Math.round(6 / n);
+      for (let k = 0; k < count; k++) {
         const geo = new THREE.SphereGeometry(0.11, 6, 4);
         const mat = new THREE.MeshPhysicalMaterial({
           color: col, emissive: col, emissiveIntensity: 0.9,
@@ -212,21 +245,17 @@ export class RAGScene {
     });
 
     // Coordinate axes
-    [
-      [1, 0, 0], [0, 1, 0], [0, 0, 1],
-    ].forEach(dir => {
+    [[1,0,0],[0,1,0],[0,0,1]].forEach(dir => {
       const L = 3.8;
-      const pts = [
-        new THREE.Vector3(-dir[0] * L, -dir[1] * L, -dir[2] * L),
-        new THREE.Vector3(dir[0] * L, dir[1] * L, dir[2] * L),
-      ];
       g.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-dir[0]*L, -dir[1]*L, -dir[2]*L),
+          new THREE.Vector3(dir[0]*L, dir[1]*L, dir[2]*L),
+        ]),
         new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.35 }),
       ));
     });
 
-    // Bounding wireframe sphere
     g.add(new THREE.Mesh(
       new THREE.SphereGeometry(3.4, 10, 7),
       new THREE.MeshBasicMaterial({ color: '#1e293b', wireframe: true, transparent: true, opacity: 0.07 }),
@@ -237,7 +266,7 @@ export class RAGScene {
     g.add(lbl);
     this._labels.push(lbl);
 
-    const sub = makeTextSprite('768-dim → 3D projection', { fontSize: 17, color: '#155e75' });
+    const sub = makeTextSprite(`${this.opts.embDim}-dim → 3D projection`, { fontSize: 17, color: '#155e75' });
     sub.position.set(0, -4.3, 0);
     sub.visible = this.opts.showNumbers;
     this._embSub = sub;
@@ -247,17 +276,21 @@ export class RAGScene {
   // ------------------------------------------------------------------ stage 4 — vector db
 
   _buildVectorDB() {
+    const n = Math.max(2, Math.min(6, this.opts.numChunks));
+    const COLORS = ALL_CHUNK_COLORS.slice(0, n);
+    const COLS = this._dbCols = 6;
+    const ROWS = n;
     const g = new THREE.Group();
     g.position.set(10, 0, 0);
     this.root.add(g);
-
-    const COLORS = ['#ec4899', '#a78bfa', '#22d3ee', '#fbbf24'];
-    const COLS = 6, ROWS = 4;
     this._dbCells = [];
+    this._dbGroup = g;
 
-    // Back panel
+    const panelW = COLS * 0.9 + 0.6;
+    const panelH = ROWS * 0.9 + 0.6;
+
     g.add(new THREE.Mesh(
-      new THREE.BoxGeometry(COLS * 0.9 + 0.6, ROWS * 0.9 + 0.6, 0.25),
+      new THREE.BoxGeometry(panelW, panelH, 0.25),
       new THREE.MeshPhysicalMaterial({
         color: '#0f172a', emissive: '#1e293b', emissiveIntensity: 0.4,
         transparent: true, opacity: 0.75, roughness: 0.6, metalness: 0.4,
@@ -279,21 +312,69 @@ export class RAGScene {
         cell.position.set(x, y, 0.22);
         cell.userData.phase = Math.random() * Math.PI * 2;
         cell.userData.baseEmissive = baseEmissive;
+        cell.userData.row = r;
         g.add(cell);
         this._dbCells.push(cell);
       }
     }
 
+    // Row labels (C1, C2, ...)
+    for (let r = 0; r < ROWS; r++) {
+      const y = (r - (ROWS - 1) / 2) * 0.9;
+      const rowLbl = makeTextSprite(`C${r+1}`, { fontSize: 16, color: COLORS[r] });
+      rowLbl.position.set(-panelW / 2 - 0.5, y, 0.5);
+      rowLbl.visible = this.opts.showNumbers;
+      g.add(rowLbl);
+    }
+
     const lbl = makeTextSprite('Vector Store', { fontSize: 24, color: '#34d399' });
-    lbl.position.set(0, 3.4, 0);
+    lbl.position.set(0, panelH / 2 + 0.9, 0);
     g.add(lbl);
     this._labels.push(lbl);
 
     const sub = makeTextSprite('pgvector / Pinecone / FAISS', { fontSize: 17, color: '#065f46' });
-    sub.position.set(0, -3.5, 0);
+    sub.position.set(0, -panelH / 2 - 0.9, 0);
     sub.visible = this.opts.showNumbers;
     this._dbSub = sub;
     g.add(sub);
+
+    this._applyTopK();
+  }
+
+  // Highlight the top-K retrieved rows in the vector DB
+  _applyTopK() {
+    if (!this._dbCells.length) return;
+    const k = Math.max(1, Math.min(this.opts.numChunks, this.opts.topK));
+    this._dbCells.forEach(cell => {
+      const isTopK = cell.userData.row < k;
+      cell.material.emissiveIntensity = isTopK
+        ? Math.min(1.4, cell.userData.baseEmissive * 3.5)
+        : cell.userData.baseEmissive * 0.35;
+      cell.material.opacity = isTopK ? 1.0 : 0.45;
+    });
+  }
+
+  // Cosine similarity labels near retrieved rows
+  _buildSimilarityLabels() {
+    this._simLabels.forEach(l => this.root.remove(l));
+    this._simLabels = [];
+    if (!this.opts.showSimilarity) return;
+
+    const k = Math.max(1, Math.min(this.opts.numChunks, this.opts.topK));
+    const n = Math.max(2, Math.min(6, this.opts.numChunks));
+    const SIM_SCORES = [0.94, 0.87, 0.72, 0.61, 0.53, 0.44];
+    const COLS = this._dbCols;
+    const ROWS = n;
+    const panelH = ROWS * 0.9 + 0.6;
+
+    for (let r = 0; r < k; r++) {
+      const score = SIM_SCORES[r] ?? (0.40 + Math.random() * 0.2);
+      const y = (r - (ROWS - 1) / 2) * 0.9;
+      const lbl = makeTextSprite(`sim=${score.toFixed(2)} ★`, { fontSize: 19, color: '#22d3ee' });
+      lbl.position.set(10 + (COLS * 0.9 / 2) + 1.8, y, 0.5);
+      this.root.add(lbl);
+      this._simLabels.push(lbl);
+    }
   }
 
   // ------------------------------------------------------------------ stage 5 — query + retrieve
@@ -312,7 +393,6 @@ export class RAGScene {
     this._querySphere = new THREE.Mesh(qGeo, qMat);
     g.add(this._querySphere);
 
-    // Animated rings
     const mkRing = (r, col, op) => {
       const m = new THREE.Mesh(
         new THREE.TorusGeometry(r, 0.03, 8, 48),
@@ -328,12 +408,25 @@ export class RAGScene {
     this._qRing3 = mkRing(2.4, '#22d3ee', 0.09);
     this._qRing3.rotation.x = Math.PI / 3;
 
+    // topK beam lines from query to DB
+    const k = Math.max(1, Math.min(this.opts.numChunks, this.opts.topK));
+    const n = this.opts.numChunks;
+    for (let r = 0; r < k; r++) {
+      const y = (r - (n - 1) / 2) * 0.9;
+      const col = ALL_CHUNK_COLORS[r];
+      const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(-8.5, y, 0)];
+      g.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.22 }),
+      ));
+    }
+
     const lbl = makeTextSprite('Query + Retrieve', { fontSize: 24, color: '#67e8f9' });
     lbl.position.set(0, 3.4, 0);
     g.add(lbl);
     this._labels.push(lbl);
 
-    const sub = makeTextSprite('Top-K cosine neighbours', { fontSize: 17, color: '#164e63' });
+    const sub = makeTextSprite(`Top-${this.opts.topK} cosine neighbours`, { fontSize: 17, color: '#164e63' });
     sub.position.set(0, -3.0, 0);
     sub.visible = this.opts.showNumbers;
     this._querySub = sub;
@@ -360,7 +453,6 @@ export class RAGScene {
       new THREE.LineBasicMaterial({ color: '#4ade80', transparent: true, opacity: 0.6 }),
     ));
 
-    // Token output lines
     for (let i = 0; i < 5; i++) {
       const lw = 0.5 + Math.random() * 1.4;
       const lmesh = new THREE.Mesh(
@@ -369,6 +461,18 @@ export class RAGScene {
       );
       lmesh.position.set(-0.7 + lw / 2 - 1.5, 1.3 - i * 0.45, 0.29);
       g.add(lmesh);
+    }
+
+    // Show topK context windows being fed in
+    const k = Math.max(1, Math.min(this.opts.numChunks, this.opts.topK));
+    for (let r = 0; r < k; r++) {
+      const col = ALL_CHUNK_COLORS[r];
+      const ctx = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.35, 0.08),
+        new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.8, transparent: true, opacity: 0.75 }),
+      );
+      ctx.position.set(-2.0, 1.2 - r * 0.42, 0.35);
+      g.add(ctx);
     }
 
     const lbl = makeTextSprite('LLM + Answer', { fontSize: 24, color: '#4ade80' });
@@ -386,19 +490,17 @@ export class RAGScene {
   // ------------------------------------------------------------------ flow connectors
 
   _buildFlowConnectors() {
+    const n = Math.max(2, Math.min(6, this.opts.numChunks));
+    const COLORS = ALL_CHUNK_COLORS.slice(0, n);
+
     const connections = [
-      // doc → chunks (single, middle)
       { from: new THREE.Vector3(-15.7, 0, 0), to: new THREE.Vector3(-11.4, 0, 0), col: '#94a3b8' },
-      // chunks → embedding (4 coloured lines)
-      { from: new THREE.Vector3(-6.6, 3.3, 0), to: new THREE.Vector3(-2.8, 2.2, 0), col: '#ec4899' },
-      { from: new THREE.Vector3(-6.6, 1.1, 0), to: new THREE.Vector3(-2.8, 0.8, 0), col: '#a78bfa' },
-      { from: new THREE.Vector3(-6.6, -1.1, 0), to: new THREE.Vector3(-2.8, -0.8, 0), col: '#22d3ee' },
-      { from: new THREE.Vector3(-6.6, -3.3, 0), to: new THREE.Vector3(-2.8, -2.2, 0), col: '#fbbf24' },
-      // embedding → vector db
+      ...COLORS.map((col, i) => {
+        const y = (i - (n - 1) / 2) * 2.1;
+        return { from: new THREE.Vector3(-6.6, y, 0), to: new THREE.Vector3(-2.8, y * 0.55, 0), col };
+      }),
       { from: new THREE.Vector3(2.4, 0, 0), to: new THREE.Vector3(7.0, 0, 0), col: '#22d3ee' },
-      // vector db → query
       { from: new THREE.Vector3(13.0, 0, 0), to: new THREE.Vector3(17.2, 0, 0), col: '#34d399' },
-      // query → llm
       { from: new THREE.Vector3(19.0, 0, 0), to: new THREE.Vector3(25.2, 0, 0), col: '#67e8f9' },
     ];
 
@@ -409,31 +511,21 @@ export class RAGScene {
         new THREE.LineBasicMaterial({ color: conn.col, transparent: true, opacity: 0.18 }),
       ));
 
-      // Primary dot
-      const dMat = new THREE.MeshPhysicalMaterial({
-        color: conn.col, emissive: conn.col, emissiveIntensity: 1.3,
-        metalness: 0.1, roughness: 0.1,
-      });
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), dMat);
-      this.root.add(dot);
-      this._flowDots.push({
-        from: conn.from.clone(), to: conn.to.clone(), dot,
-        t: (ci * 0.125) % 1,
-        speed: 0.28 + Math.random() * 0.18,
-      });
-
-      // Second trailing dot for denser visual
-      const dMat2 = new THREE.MeshPhysicalMaterial({
-        color: conn.col, emissive: conn.col, emissiveIntensity: 0.6,
-        metalness: 0.1, roughness: 0.2, transparent: true, opacity: 0.5,
-      });
-      const dot2 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), dMat2);
-      this.root.add(dot2);
-      this._flowDots.push({
-        from: conn.from.clone(), to: conn.to.clone(), dot: dot2,
-        t: ((ci * 0.125) + 0.5) % 1,
-        speed: 0.28 + Math.random() * 0.18,
-      });
+      const mkDot = (tOffset, r, opacity) => {
+        const dMat = new THREE.MeshPhysicalMaterial({
+          color: conn.col, emissive: conn.col, emissiveIntensity: 1.3 * opacity,
+          metalness: 0.1, roughness: 0.1, transparent: opacity < 1, opacity,
+        });
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 4), dMat);
+        this.root.add(dot);
+        this._flowDots.push({
+          from: conn.from.clone(), to: conn.to.clone(), dot,
+          t: (ci * 0.1 + tOffset) % 1,
+          speed: 0.28 + Math.random() * 0.18,
+        });
+      };
+      mkDot(0,    0.11, 1.0);
+      mkDot(0.5,  0.08, 0.5);
     });
   }
 
@@ -460,35 +552,32 @@ export class RAGScene {
     if (!this.opts.animate) return;
     const spd = this.opts.speed;
 
-    // Document ring spin
     if (this._docRing) this._docRing.rotation.z = t * 0.55;
 
-    // Doc pulse
     if (this._docMesh) {
       const p = Math.sin(t * 1.8) * 0.5 + 0.5;
       this._docMesh.material.emissiveIntensity = 0.3 + p * 0.35;
     }
 
-    // Chunk pulse
     this._chunkMeshes.forEach(c => {
       const p = Math.sin(t * 2.1 + c.userData.phase) * 0.5 + 0.5;
       c.material.emissiveIntensity = 0.15 + p * 0.4;
     });
 
-    // Embedding point breathe
     this._embPoints.forEach(pt => {
       const p = Math.sin(t * 2.6 + pt.userData.phase) * 0.5 + 0.5;
       pt.material.emissiveIntensity = 0.55 + p * 0.65;
       pt.scale.setScalar(0.82 + p * 0.28);
     });
 
-    // DB cell twinkle
+    const k = Math.max(1, Math.min(this.opts.numChunks, this.opts.topK));
     this._dbCells.forEach(cell => {
       const p = Math.sin(t * 2.0 + cell.userData.phase) * 0.5 + 0.5;
-      cell.material.emissiveIntensity = cell.userData.baseEmissive * (0.55 + p * 0.9);
+      const isTopK = cell.userData.row < k;
+      const factor = isTopK ? (0.7 + p * 1.2) : (0.3 + p * 0.35);
+      cell.material.emissiveIntensity = cell.userData.baseEmissive * factor;
     });
 
-    // Query pulse + ring spin
     if (this._querySphere) {
       const p = Math.sin(t * 2.4) * 0.5 + 0.5;
       this._querySphere.material.emissiveIntensity = 0.75 + p * 0.65;
@@ -498,13 +587,11 @@ export class RAGScene {
       this._qRing3.rotation.z = t * 0.55;
     }
 
-    // LLM pulse
     if (this._llmBox) {
       const p = Math.sin(t * 1.6) * 0.5 + 0.5;
       this._llmBox.material.emissiveIntensity = 0.28 + p * 0.42;
     }
 
-    // Flow dots
     this._flowDots.forEach(fd => {
       fd.t = (fd.t + dt * spd * fd.speed) % 1;
       fd.dot.position.lerpVectors(fd.from, fd.to, fd.t);
