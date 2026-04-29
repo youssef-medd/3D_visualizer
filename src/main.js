@@ -424,13 +424,13 @@ app.innerHTML = `
   <div class="topbar">
     <div class="brand">
       <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
-          <circle cx="6" cy="7" r="2.2" fill="currentColor"/>
-          <circle cx="6" cy="17" r="2.2" fill="currentColor"/>
-          <circle cx="18" cy="12" r="2.2" fill="currentColor"/>
-          <circle cx="12" cy="5" r="1.5" fill="currentColor" opacity=".7"/>
-          <circle cx="12" cy="19" r="1.5" fill="currentColor" opacity=".7"/>
-          <path d="M6 7 L18 12 M6 17 L18 12 M12 5 L18 12 M12 19 L18 12 M6 7 L12 5 M6 17 L12 19" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
+        <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+          <circle cx="4" cy="6"  r="2" fill="#060608"/>
+          <circle cx="4" cy="14" r="2" fill="#060608"/>
+          <circle cx="16" cy="10" r="2" fill="#060608"/>
+          <circle cx="10" cy="3"  r="1.4" fill="#060608" opacity=".75"/>
+          <circle cx="10" cy="17" r="1.4" fill="#060608" opacity=".75"/>
+          <path d="M4 6 L16 10 M4 14 L16 10 M10 3 L16 10 M10 17 L16 10 M4 6 L10 3 M4 14 L10 17" stroke="#060608" stroke-width="1.3" stroke-linecap="round" opacity=".65"/>
         </svg>
       </div>
       <div class="brand-name">Neural<em>Forge</em><span class="brand-3d">3D</span></div>
@@ -544,7 +544,7 @@ function rerenderAll() {
   });
 
   const isArch = ARCH_TABS.includes(state.activeTab);
-  document.querySelector('#theory-overlay').style.display = isArch ? 'none' : 'block';
+  document.querySelector('#theory-overlay').style.display = 'none';
 
   renderTopbarStats();
   renderViewportToolbar();
@@ -557,7 +557,6 @@ function rerenderAll() {
   } else {
     renderTheorySidebarLeft();
     renderTheorySidebarRight();
-    renderTheoryOverlay();
   }
 }
 
@@ -1387,6 +1386,11 @@ function renderTheorySidebarRight() {
         <div class="insight">Local connectivity captures spatial structure that fully-connected layers miss.</div>
         <div class="insight">Stacking convolutions builds a hierarchy: edges → textures → parts → objects.</div>
       </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">y[i,j] = &Sigma;<sub>k,l</sub> x[i&middot;s+k&minus;p, j&middot;s+l&minus;p] &middot; w[k,l]</div>
+        <div class="theory-eq">outSize = &lfloor;(N + 2P &minus; K) / S&rfloor; + 1</div>
+      </div>
     `;
   } else if (state.activeTab === 'pooling') {
     right.innerHTML = `
@@ -1414,6 +1418,14 @@ function renderTheorySidebarRight() {
         <div class="insight">It introduces a small amount of translation invariance — exact pixel position no longer matters.</div>
         <div class="insight">Pooling has no learnable parameters: it's a fixed reduction over a window.</div>
       </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">${state.theory.pooling.mode === 'max'
+          ? 'y[i,j] = max<sub>k,l</sub> x[i&middot;s+k, j&middot;s+l]'
+          : 'y[i,j] = (1/K&sup2;) &middot; &Sigma;<sub>k,l</sub> x[i&middot;s+k, j&middot;s+l]'
+        }</div>
+        <div class="theory-eq">outSize = &lfloor;(N &minus; K) / S&rfloor; + 1</div>
+      </div>
     `;
   } else if (state.activeTab === 'attention') {
     right.innerHTML = `
@@ -1439,6 +1451,11 @@ function renderTheorySidebarRight() {
         <div class="insight">Multi-head attention lets different heads specialize in different relationships.</div>
         <div class="insight">Self-attention is permutation-equivariant; positional encodings bring order back in.</div>
       </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">Attention(Q,K,V) = softmax(QK<sup>T</sup> / &radic;d<sub>k</sub>) &middot; V</div>
+        <div class="theory-eq">Q = XW<sub>Q</sub> &nbsp; K = XW<sub>K</sub> &nbsp; V = XW<sub>V</sub></div>
+      </div>
     `;
   } else if (state.activeTab === 'gradientDescent') {
     right.innerHTML = `
@@ -1461,6 +1478,12 @@ function renderTheorySidebarRight() {
         <div class="insight">Learning rate is the single most important hyperparameter — too high diverges, too low crawls.</div>
         <div class="insight">Adaptive optimizers (Adam, RMSProp) help when gradients differ wildly across parameters.</div>
         <div class="insight">Loss surfaces of real networks are extremely high-dimensional, but local geometry still matters.</div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">&theta; &larr; &theta; &minus; &eta; &middot; &nabla;<sub>&theta;</sub> L(&theta;)</div>
+        <div class="theory-eq">Momentum: v = &beta;v + g &nbsp;&nbsp; &theta; &larr; &theta; &minus; &eta;v</div>
+        <div class="theory-eq">Adam: &theta; &larr; &theta; &minus; &eta; &middot; m&#770; / (&radic;v&#770; + &epsilon;)</div>
       </div>
     `;
   } else if (state.activeTab === 'pipeline') {
@@ -1485,6 +1508,13 @@ function renderTheorySidebarRight() {
         <div class="insight">NN weights and CNN filters are all updated by the same gradient — one backward pass updates the entire model.</div>
         <div class="insight">The loss is the single number that drives everything. Choosing the right loss function is a design decision.</div>
         <div class="insight">In practice the model is ONE network; the NN and CNN here represent different architectural blocks in the same graph.</div>
+      </div>
+      <div class="section">
+        <div class="section-title">${iconHTML('diagnostics')}<span>Key Equations</span></div>
+        <div class="theory-eq">Forward:  &ycirc; = f(x; &theta;)</div>
+        <div class="theory-eq">Loss:     L = &ell;(&ycirc;, y)</div>
+        <div class="theory-eq">Backward: &nabla;&theta; = &part;L / &part;&theta;</div>
+        <div class="theory-eq">Update:   &theta; &larr; &theta; &minus; &eta; &nabla;&theta;</div>
       </div>
     `;
   }
