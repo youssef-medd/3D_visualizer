@@ -27,7 +27,7 @@ export class GradientDescentScene {
       learningRate: 0.05,
       animate: true,
       speed: 1.0,
-      gridRes: 80,
+      gridRes: 55,
       gridSize: 14,
       showNumbers: true,
     };
@@ -115,7 +115,7 @@ export class GradientDescentScene {
     this.root.add(this.surfaceMesh);
 
     const wireGeo = new THREE.WireframeGeometry(geo);
-    const wireMat = new THREE.LineBasicMaterial({ color: '#a78bfa', transparent: true, opacity: 0.10 });
+    const wireMat = new THREE.LineBasicMaterial({ color: '#a78bfa', transparent: true, opacity: 0.07 });
     this.wireMesh = new THREE.LineSegments(wireGeo, wireMat);
     this.wireMesh.position.y = -1 + 0.005;
     this.root.add(this.wireMesh);
@@ -143,7 +143,7 @@ export class GradientDescentScene {
     ];
 
     optimizers.forEach((opt, idx) => {
-      const geo = new THREE.SphereGeometry(0.28, 18, 14);
+      const geo = new THREE.SphereGeometry(0.28, 10, 8);
       const mat = new THREE.MeshPhysicalMaterial({
         color: opt.color, emissive: opt.color, emissiveIntensity: 1.0,
         metalness: 0.3, roughness: 0.2, clearcoat: 0.9,

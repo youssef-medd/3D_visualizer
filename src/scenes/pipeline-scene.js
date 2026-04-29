@@ -80,7 +80,7 @@ export class PipelineScene {
       for (let ni = 0; ni < count; ni++) {
         const y = (ni - (count - 1) / 2) * 1.2;
         const hue = 200 + li * 35;
-        const geo = new THREE.SphereGeometry(nodeR, 20, 16);
+        const geo = new THREE.SphereGeometry(nodeR, 12, 8);
         const mat = new THREE.MeshPhysicalMaterial({
           color: `hsl(${hue},70%,55%)`,
           emissive: `hsl(${hue},70%,35%)`,
@@ -125,7 +125,7 @@ export class PipelineScene {
 
   _buildLossHint() {
     // Simple glowing sphere at the origin to represent the loss scalar
-    const geo = new THREE.SphereGeometry(0.7, 32, 24);
+    const geo = new THREE.SphereGeometry(0.7, 18, 12);
     const mat = new THREE.MeshPhysicalMaterial({
       color: '#f472b6', emissive: '#f472b6', emissiveIntensity: 1.2,
       metalness: 0.1, roughness: 0.1, clearcoat: 1.0,
@@ -136,7 +136,7 @@ export class PipelineScene {
     this.root.add(this._lossSphere);
 
     // Ring around it
-    const ringGeo = new THREE.TorusGeometry(1.6, 0.04, 10, 64);
+    const ringGeo = new THREE.TorusGeometry(1.6, 0.04, 8, 48);
     const ringMat = new THREE.MeshBasicMaterial({ color: '#f472b6', transparent: true, opacity: 0.35 });
     this._lossRing = new THREE.Mesh(ringGeo, ringMat);
     this._lossRing.position.set(0, 1.5, 0);
@@ -239,7 +239,7 @@ export class PipelineScene {
       this.root.add(new THREE.Line(geo, mat));
 
       // Animated dot — travels from "to" → "from" (backprop direction)
-      const dotGeo = new THREE.SphereGeometry(0.18, 14, 10);
+      const dotGeo = new THREE.SphereGeometry(0.18, 8, 6);
       const dotMat = new THREE.MeshPhysicalMaterial({
         color: pair.color, emissive: pair.color, emissiveIntensity: 1.4,
         metalness: 0.1, roughness: 0.1,
@@ -253,7 +253,7 @@ export class PipelineScene {
         color: pair.color, emissive: pair.color, emissiveIntensity: 0.7,
         metalness: 0.1, roughness: 0.2, transparent: true, opacity: 0.6,
       });
-      const fwdDot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 10), fwdDotMat);
+      const fwdDot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), fwdDotMat);
       this.root.add(fwdDot);
       this._chainDots.push({ curve, dot: fwdDot, t: (pi * 0.5 + 0.5) % 1, forward: true });
     });

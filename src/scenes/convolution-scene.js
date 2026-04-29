@@ -189,7 +189,7 @@ export class ConvolutionScene {
     kernelGroup.add(kernelEdges);
 
     // Vertical "spotlight" cylinder showing the receptive field
-    const spotGeo = new THREE.CylinderGeometry(K * cellSize * 0.55, K * cellSize * 0.4, 2.4, 16, 1, true);
+    const spotGeo = new THREE.CylinderGeometry(K * cellSize * 0.55, K * cellSize * 0.4, 2.4, 10, 1, true);
     const spotMat = new THREE.MeshBasicMaterial({
       color: '#f472b6',
       transparent: true,
