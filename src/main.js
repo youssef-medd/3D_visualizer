@@ -105,10 +105,10 @@ const state = {
   theory: {
     convolution: { kernelSize: 3, stride: 1, padding: 1, inputSize: 8, animate: true, speed: 1.0, showNumbers: true },
     pooling:     { kernelSize: 2, stride: 2, inputSize: 4, mode: 'max', animate: true, speed: 1.0, showNumbers: true },
-    attention:   { seqLen: 6, animate: true, speed: 1.0, showNumbers: true },
+    attention:   { seqLen: 6, heads: 2, dModel: 256, causalMask: false, temperature: 1.0, showPositionalEncoding: false, animate: true, speed: 1.0, showNumbers: true },
     gradientDescent: { learningRate: 0.05, animate: true, speed: 1.0, showNumbers: true },
     pipeline: { animate: true, speed: 1.0, showNumbers: true },
-    rag:      { animate: true, speed: 1.0, showNumbers: true },
+    rag:      { animate: true, speed: 1.0, showNumbers: true, numChunks: 4, topK: 2, embDim: 768, showSimilarity: true },
   },
 };
 
@@ -660,11 +660,13 @@ function renderViewportCorner() {
   const el = document.querySelector('#viewport-corner');
   if (ARCH_TABS.includes(state.activeTab)) {
     el.innerHTML = `
+      <button class="btn btn-icon" data-action="screenshot" title="Screenshot">${iconHTML('camera')}</button>
       <button class="btn btn-icon" data-action="randomize" title="Randomize layout">${iconHTML('randomize')}</button>
       <button class="btn btn-icon" data-action="reset-view" title="Reset view">${iconHTML('reset')}</button>
     `;
   } else {
     el.innerHTML = `
+      <button class="btn btn-icon" data-action="screenshot" title="Screenshot">${iconHTML('camera')}</button>
       <button class="btn btn-icon" data-action="reset-theory" title="Reset animation">${iconHTML('reset_play')}</button>
     `;
   }
@@ -676,6 +678,7 @@ function renderViewportCorner() {
     if (action === 'randomize') randomizeArch();
     else if (action === 'reset-view') resetCamera();
     else if (action === 'reset-theory') resetTheoryScene();
+    else if (action === 'screenshot') takeScreenshot();
   };
 }
 
@@ -1275,6 +1278,19 @@ function renderTheorySidebarLeft() {
         <div class="section-title">${iconHTML('controls')}<span>Attention Controls</span></div>
         <div class="card">
           ${rangeControlGeneric('Sequence length', 'seqLen', o.seqLen, 3, 10, 1, 'attention')}
+          ${rangeControlGeneric('Heads', 'heads', o.heads, 1, 4, 1, 'attention')}
+          <div class="control" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;">
+            <div class="control-label" style="margin-bottom:0;">d<sub>model</sub></div>
+            <div class="seg" id="attn-dmodel-seg">
+              <button class="seg-item ${o.dModel === 64  ? 'active' : ''}" data-dmodel="64">64</button>
+              <button class="seg-item ${o.dModel === 128 ? 'active' : ''}" data-dmodel="128">128</button>
+              <button class="seg-item ${o.dModel === 256 ? 'active' : ''}" data-dmodel="256">256</button>
+              <button class="seg-item ${o.dModel === 512 ? 'active' : ''}" data-dmodel="512">512</button>
+            </div>
+          </div>
+          ${rangeControlGeneric('Temperature', 'temperature', o.temperature, 0.5, 2.0, 0.1, 'attention')}
+          ${theoryToggle('Causal mask (GPT)', 'causalMask', o.causalMask, 'attention')}
+          ${theoryToggle('Positional encoding', 'showPositionalEncoding', o.showPositionalEncoding, 'attention')}
           ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'attention')}
           ${theoryToggle('Animate', 'animate', o.animate, 'attention')}
           ${theoryToggle('Show numbers', 'showNumbers', o.showNumbers, 'attention')}
@@ -1287,6 +1303,13 @@ function renderTheorySidebarLeft() {
         <div class="insight">The active row highlight shows attention being computed for one query at a time.</div>
       </div>
     `;
+    left.querySelector('#attn-dmodel-seg').addEventListener('click', (e) => {
+      const btn = e.target.closest('.seg-item');
+      if (!btn) return;
+      state.theory.attention.dModel = parseInt(btn.dataset.dmodel, 10);
+      applyTheoryOptions('attention');
+      renderTheorySidebarLeft();
+    });
   } else if (tab === 'gradientDescent') {
     const o = state.theory.gradientDescent;
     left.innerHTML = `
@@ -1336,6 +1359,17 @@ function renderTheorySidebarLeft() {
       <div class="section">
         <div class="section-title">${iconHTML('controls')}<span>RAG Controls</span></div>
         <div class="card">
+          ${rangeControlGeneric('Chunks', 'numChunks', o.numChunks, 2, 6, 1, 'rag')}
+          ${rangeControlGeneric('Top-K', 'topK', o.topK, 1, 4, 1, 'rag')}
+          <div class="control" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;">
+            <div class="control-label" style="margin-bottom:0;">Emb dim</div>
+            <div class="seg" id="rag-embdim-seg">
+              <button class="seg-item ${o.embDim === 384  ? 'active' : ''}" data-embdim="384">384</button>
+              <button class="seg-item ${o.embDim === 768  ? 'active' : ''}" data-embdim="768">768</button>
+              <button class="seg-item ${o.embDim === 1536 ? 'active' : ''}" data-embdim="1536">1536</button>
+            </div>
+          </div>
+          ${theoryToggle('Show similarity', 'showSimilarity', o.showSimilarity, 'rag')}
           ${rangeControlGeneric('Speed', 'speed', o.speed, 0.2, 3.0, 0.1, 'rag')}
           ${theoryToggle('Animate', 'animate', o.animate, 'rag')}
           ${theoryToggle('Show labels', 'showNumbers', o.showNumbers, 'rag')}
@@ -1344,11 +1378,18 @@ function renderTheorySidebarLeft() {
       <div class="section">
         <div class="section-title">${iconHTML('insight')}<span>What to look for</span></div>
         <div class="insight">Coloured flow dots travel left→right: each represents a data packet moving through the pipeline stage.</div>
-        <div class="insight">The 4 chunk colours persist from splitting all the way into the vector store — each row is one chunk's vectors.</div>
-        <div class="insight">The point cloud (Embedding Space) shows 4 distinct clusters — semantically similar chunks end up close together in high-dim space.</div>
+        <div class="insight">The chunk colours persist from splitting all the way into the vector store — each row is one chunk's vectors.</div>
+        <div class="insight">The point cloud (Embedding Space) shows distinct clusters — semantically similar chunks end up close together in high-dim space.</div>
         <div class="insight">The query sphere (cyan) represents a user question vectorised by the same embedding model. Nearest neighbours in the DB are the retrieved context.</div>
       </div>
     `;
+    left.querySelector('#rag-embdim-seg').addEventListener('click', (e) => {
+      const btn = e.target.closest('.seg-item');
+      if (!btn) return;
+      state.theory.rag.embDim = parseInt(btn.dataset.embdim, 10);
+      applyTheoryOptions('rag');
+      renderTheorySidebarLeft();
+    });
   }
 
   // Wire theory range/toggle inputs
@@ -1666,6 +1707,9 @@ function rebuildAndRerender() {
   archScene.setOptions({ mode: state.activeTab });
   archScene.build(state.layers);
   rerenderAll();
+  try {
+    localStorage.setItem('neuralforge_arch', JSON.stringify({ layers: state.layers, activeTab: state.activeTab }));
+  } catch (_) {}
 }
 
 function randomizeArch() {
@@ -1698,8 +1742,98 @@ function resetTheoryScene() {
 }
 
 /* ==========================================================================
+   Toast + Keyboard Shortcuts + Screenshot
+   ========================================================================== */
+
+(function injectToastCSS() {
+  const s = document.createElement('style');
+  s.textContent = [
+    '.kbd-toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);',
+    'background:rgba(15,15,22,.93);color:#e2e8f0;font:12px/1 Inter,sans-serif;',
+    'padding:7px 18px;border-radius:999px;pointer-events:none;z-index:9999;',
+    'white-space:nowrap;animation:kbd-fade 1.2s ease forwards;}',
+    '@keyframes kbd-fade{0%{opacity:1}70%{opacity:1}100%{opacity:0}}',
+  ].join('');
+  document.head.appendChild(s);
+})();
+
+function showToast(msg) {
+  const old = document.getElementById('kbd-toast');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'kbd-toast';
+  el.className = 'kbd-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 1200);
+}
+
+function takeScreenshot() {
+  const active = sceneHost.activeScene;
+  if (!active) return;
+  sceneHost.renderer.render(active.scene, active.camera);
+  const url = sceneHost.renderer.domElement.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'neuralforge-screenshot.png';
+  a.click();
+}
+
+const ALL_TABS = [...ARCH_TABS, ...THEORY_TABS];
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, select, textarea')) return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (THEORY_TABS.includes(state.activeTab)) {
+      state.theory[state.activeTab].animate = !state.theory[state.activeTab].animate;
+      applyTheoryOptions(state.activeTab);
+      renderTheorySidebarLeft();
+      showToast(state.theory[state.activeTab].animate ? 'Playing' : 'Paused');
+    }
+  } else if (e.code === 'KeyR') {
+    if (ARCH_TABS.includes(state.activeTab)) {
+      resetCamera();
+    } else {
+      resetTheoryScene();
+    }
+    showToast('Reset');
+  } else if (e.code === 'ArrowRight') {
+    e.preventDefault();
+    const idx = ALL_TABS.indexOf(state.activeTab);
+    const next = ALL_TABS[(idx + 1) % ALL_TABS.length];
+    switchTab(next);
+    showToast(TAB_LABELS[next]);
+  } else if (e.code === 'ArrowLeft') {
+    e.preventDefault();
+    const idx = ALL_TABS.indexOf(state.activeTab);
+    const prev = ALL_TABS[(idx - 1 + ALL_TABS.length) % ALL_TABS.length];
+    switchTab(prev);
+    showToast(TAB_LABELS[prev]);
+  } else if (e.key >= '1' && e.key <= '7') {
+    const tab = ALL_TABS[parseInt(e.key, 10) - 1];
+    if (tab) { switchTab(tab); showToast(TAB_LABELS[tab]); }
+  }
+});
+
+/* ==========================================================================
    Boot
    ========================================================================== */
+
+// Restore architecture state persisted from the last session
+try {
+  const saved = JSON.parse(localStorage.getItem('neuralforge_arch') || 'null');
+  if (saved
+      && Array.isArray(saved.layers)
+      && saved.layers.length > 0
+      && saved.layers.every(l => l != null && typeof l.name === 'string' && typeof l.type === 'string' && 'params' in l)) {
+    state.layers = saved.layers;
+    if (saved.activeTab && ARCH_TABS.includes(saved.activeTab)) {
+      state.activeTab = saved.activeTab;
+    }
+  }
+} catch (_) {}
 
 archScene.setOptions({ mode: state.activeTab });
 archScene.build(state.layers);
