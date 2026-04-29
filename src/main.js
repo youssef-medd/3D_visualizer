@@ -351,18 +351,21 @@ function mountSplash() {
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
-      // Traveling pulse
+      // Traveling pulse — skip if edge is behind the projection plane (depth ≤ 0)
+      // to avoid createRadialGradient throwing with a non-positive outer radius.
       e.progress = (e.progress + e.speed) % 1;
-      const px = pA.sx + (pB.sx - pA.sx) * e.progress;
-      const py = pA.sy + (pB.sy - pA.sy) * e.progress;
       const pulseR = 3 * avgDepth;
-      const gPulse = ctx.createRadialGradient(px, py, 0, px, py, pulseR * 3);
-      gPulse.addColorStop(0, `rgba(0,234,100,${avgDepth * 0.85})`);
-      gPulse.addColorStop(1, 'rgba(0,234,100,0)');
-      ctx.beginPath();
-      ctx.arc(px, py, pulseR * 3, 0, Math.PI * 2);
-      ctx.fillStyle = gPulse;
-      ctx.fill();
+      if (pulseR > 0) {
+        const px = pA.sx + (pB.sx - pA.sx) * e.progress;
+        const py = pA.sy + (pB.sy - pA.sy) * e.progress;
+        const gPulse = ctx.createRadialGradient(px, py, 0, px, py, pulseR * 3);
+        gPulse.addColorStop(0, `rgba(0,234,100,${avgDepth * 0.85})`);
+        gPulse.addColorStop(1, 'rgba(0,234,100,0)');
+        ctx.beginPath();
+        ctx.arc(px, py, pulseR * 3, 0, Math.PI * 2);
+        ctx.fillStyle = gPulse;
+        ctx.fill();
+      }
     });
 
     // Draw nodes (sorted back-to-front)
@@ -371,6 +374,7 @@ function mountSplash() {
       .sort((a, b) => a.p.depth - b.p.depth);
 
     sortedNodes.forEach(({ n, p }) => {
+      if (p.depth <= 0) return; // node is behind projection plane — skip
       const pulse = Math.sin(t3d * 2.2 + n.phase) * 0.22 + 0.78;
       const r = n.r * p.scale * 2.2 * pulse;
       const brightness = 35 + p.depth * 45;
