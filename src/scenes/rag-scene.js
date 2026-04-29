@@ -147,12 +147,12 @@ export class RAGScene {
       g.add(mesh);
       this._chunkMeshes.push(mesh);
 
-      g.add(Object.assign(
-        new THREE.LineSegments(
-          new THREE.EdgesGeometry(geo),
-          new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }),
-        ), { position: new THREE.Vector3(0, y, 0) },
-      ));
+      const chunkEdges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }),
+      );
+      chunkEdges.position.set(0, y, 0);
+      g.add(chunkEdges);
 
       for (let j = 0; j < 3; j++) {
         const lw = 0.4 + Math.random() * 1.5;
