@@ -65,7 +65,9 @@ export class GradientDescentScene {
   _build() {
     clearGroup(this.root);
     this._buildSurface();
+    this._buildContours();
     this._buildOptimizers();
+    this._buildAxisLabels();
   }
 
   // ------------------------------------------------------------------ loss surface
@@ -120,9 +122,77 @@ export class GradientDescentScene {
     this.wireMesh.position.y = -1 + 0.005;
     this.root.add(this.wireMesh);
 
-    const surfLabel = makeTextSprite('Loss  L(θ)', { fontSize: 26 });
+    const surfLabel = makeTextSprite('Loss  L(θ₁, θ₂)', { fontSize: 26 });
     surfLabel.position.set(0, 4.5, -gridSize / 2 - 0.5);
     this.root.add(surfLabel);
+  }
+
+  // ------------------------------------------------------------------ contour rings
+
+  _buildContours() {
+    if (this._contourGroup) this.root.remove(this._contourGroup);
+    const g = new THREE.Group();
+    g.position.y = -1;
+    this.root.add(g);
+    this._contourGroup = g;
+
+    // Sample the loss surface and draw iso-lines at fixed heights
+    const { gridSize } = this.opts;
+    const levels = [0.3, 0.6, 0.9, 1.2, 1.55];
+    const contourColors = ['#67e8f9', '#a78bfa', '#f472b6', '#fbbf24', '#f87171'];
+    const samples = 180;
+
+    levels.forEach((level, li) => {
+      const pts = [];
+      for (let i = 0; i <= samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        // Trace a circle in parameter space; scale radius so contour matches the level
+        // We use a march-approximation: radiate from origin until loss ≈ level
+        const dir = [Math.cos(angle), Math.sin(angle)];
+        let r = 0.2;
+        let best = null;
+        while (r < gridSize / 2 - 0.3) {
+          const lv = this._loss(dir[0] * r, dir[1] * r);
+          if (best === null || Math.abs(lv - level) < Math.abs(best.d)) {
+            best = { r, d: lv - level };
+          }
+          r += 0.12;
+        }
+        if (best) {
+          const x = dir[0] * best.r;
+          const z = dir[1] * best.r;
+          pts.push(new THREE.Vector3(x, this._loss(x, z) + 0.04, z));
+        }
+      }
+      if (pts.length > 2) {
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineBasicMaterial({
+          color: contourColors[li], transparent: true, opacity: 0.28,
+        });
+        g.add(new THREE.Line(geo, mat));
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------ axis labels
+
+  _buildAxisLabels() {
+    const { gridSize } = this.opts;
+    const half = gridSize / 2;
+
+    const θ1 = makeTextSprite('θ₁', { fontSize: 22, color: '#94a3b8' });
+    θ1.position.set(half + 0.8, -1, 0);
+    this.root.add(θ1);
+
+    const θ2 = makeTextSprite('θ₂', { fontSize: 22, color: '#94a3b8' });
+    θ2.position.set(0, -1, half + 0.8);
+    this.root.add(θ2);
+
+    const L = makeTextSprite('L↑', { fontSize: 22, color: '#f472b6' });
+    L.position.set(-half - 0.8, 2, -half - 0.8);
+    this.root.add(L);
+
+    this._axisLabels = [θ1, θ2, L];
   }
 
   // ------------------------------------------------------------------ optimizers
@@ -169,7 +239,14 @@ export class GradientDescentScene {
       const trailLine = new THREE.Line(trailGeo, trailMat);
       this.root.add(trailLine);
 
-      this.optimizerMarkers.push({ marker: m, x, z, vx: 0, vz: 0, mx: 0, mz: 0, vAx: 0, vAz: 0, step: 0, kind: opt.kind, color: opt.color, name: opt.name, active: true });
+      // Gradient arrow — points in direction of -∇L (steepest descent)
+      const arrowDir = new THREE.Vector3(0, 0, -1);
+      const arrowColor = new THREE.Color(opt.color);
+      const startY = this._loss(x, z) - 1 + 0.35;
+      const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(x, startY, z), 1.2, arrowColor, 0.35, 0.2);
+      this.root.add(arrow);
+
+      this.optimizerMarkers.push({ marker: m, x, z, vx: 0, vz: 0, mx: 0, mz: 0, vAx: 0, vAz: 0, step: 0, kind: opt.kind, color: opt.color, name: opt.name, active: true, arrow });
       this.optimizerTrails.push({ line: trailLine, points: [], maxPoints });
     });
   }
@@ -182,6 +259,7 @@ export class GradientDescentScene {
       opt.x = startX + offsetX; opt.z = startZ + offsetX;
       opt.vx = 0; opt.vz = 0; opt.mx = 0; opt.mz = 0;
       opt.vAx = 0; opt.vAz = 0; opt.step = 0; opt.active = true;
+      if (opt.arrow) opt.arrow.position.set(opt.x, this._loss(opt.x, opt.z) - 1 + 0.35, opt.z);
     });
     this.optimizerTrails.forEach(t => { t.points = []; t.line.geometry.setDrawRange(0, 0); });
   }
@@ -218,6 +296,7 @@ export class GradientDescentScene {
     const show = this.opts.showNumbers;
     this.optimizerMarkers?.forEach(opt => {
       if (opt.marker.userData.nameLabel) opt.marker.userData.nameLabel.visible = show;
+      if (opt.arrow) opt.arrow.visible = show;
     });
   }
 
@@ -234,8 +313,22 @@ export class GradientDescentScene {
         this.optimizerMarkers.forEach((opt, idx) => {
           if (!opt.active) return;
           this._stepOptimizer(opt);
-          const y = this._loss(opt.x, opt.z) - 1 + 0.35;
+          const lossVal = this._loss(opt.x, opt.z);
+          const y = lossVal - 1 + 0.35;
           opt.marker.position.set(opt.x, y, opt.z);
+
+          // Update gradient arrow — direction of -∇L in XZ plane
+          if (opt.arrow) {
+            const [gx, gz] = this._grad(opt.x, opt.z);
+            const gradLen = Math.sqrt(gx * gx + gz * gz);
+            if (gradLen > 1e-4) {
+              const dir = new THREE.Vector3(-gx / gradLen, 0, -gz / gradLen);
+              opt.arrow.position.set(opt.x, y, opt.z);
+              opt.arrow.setDirection(dir);
+              const arrowLen = Math.min(2.0, 0.4 + gradLen * 0.55);
+              opt.arrow.setLength(arrowLen, arrowLen * 0.28, arrowLen * 0.16);
+            }
+          }
 
           const trail = this.optimizerTrails[idx];
           trail.points.push(opt.x, y - 0.05, opt.z);
