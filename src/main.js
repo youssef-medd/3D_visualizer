@@ -641,6 +641,13 @@ function renderViewportToolbar() {
         <div class="stat"><span class="stat-label">η</span><span class="stat-value">${o.learningRate.toFixed(3)}</span></div>
         <div class="stat"><span class="stat-label">Optimizers</span><span class="stat-value">SGD · Momentum · Adam</span></div>
       `;
+    } else if (state.activeTab === 'rag') {
+      stats = `
+        <div class="stat"><span class="stat-label">Stages</span><span class="stat-value">6</span></div>
+        <div class="stat"><span class="stat-label">Chunks</span><span class="stat-value">4</span></div>
+        <div class="stat"><span class="stat-label">Metric</span><span class="stat-value">cosine sim</span></div>
+        <div class="stat"><span class="stat-label">DB</span><span class="stat-value">vector store</span></div>
+      `;
     }
     el.innerHTML = `
       <div class="stat"><span class="stat-label">Theory</span><span class="stat-value">${TAB_LABELS[state.activeTab]}</span></div>
@@ -747,6 +754,20 @@ function renderLegend() {
       <span class="legend-item"><span class="legend-swatch" style="background:#fbbf24;color:#fbbf24"></span>Momentum</span>
       <span class="legend-divider"></span>
       <span class="legend-item"><span class="legend-swatch" style="background:#34d399;color:#34d399"></span>Adam</span>
+      <span class="legend-divider"></span>
+      <span class="legend-item" style="color:var(--text-3);font-size:10.5px;">arrows = -∇L direction</span>
+    `;
+  } else if (state.activeTab === 'rag') {
+    el.innerHTML = `
+      <span class="legend-item"><span class="legend-swatch" style="background:#94a3b8;color:#94a3b8"></span>Document</span>
+      <span class="legend-divider"></span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#ec4899;color:#ec4899"></span>Chunk A</span>
+      <span class="legend-divider"></span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#a78bfa;color:#a78bfa"></span>Chunk B</span>
+      <span class="legend-divider"></span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#22d3ee;color:#22d3ee"></span>Chunk C · Query</span>
+      <span class="legend-divider"></span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#4ade80;color:#4ade80"></span>LLM Answer</span>
     `;
   }
 }
